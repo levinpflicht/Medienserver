@@ -1,8 +1,4 @@
-import { getFirestore } from "firebase-admin/firestore";
-import firebaseConfig from "../../firebase-applet-config.json";
-
-// Initialize Firestore from Admin SDK
-const db = getFirestore();
+import { adminDb as db } from "../lib/firebase-admin.ts";
 
 // Helper to generate positive integer IDs
 function generateNumericId(): number {
