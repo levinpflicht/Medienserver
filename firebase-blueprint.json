@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered EduSpace curators and staff members.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Authentication unique identifier" },
+        "email": { "type": "string", "format": "email", "description": "User email address" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "User creation timestamp" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "Kurations and trainer session containers.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase UID of the session creator" },
+        "sessionName": { "type": "string", "description": "Descriptive title of this curation session" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["userId", "sessionName"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Individual dialog turns in a curation or training session.",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string", "description": "ID of parent chat session" },
+        "role": { "type": "string", "enum": ["user", "model"], "description": "Turn author role" },
+        "text": { "type": "string", "description": "Text content of the message" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Message timestamp" }
+      },
+      "required": ["chatId", "role", "text"]
+    },
+    "ApiLog": {
+      "title": "ApiLog",
+      "description": "Telemetry and logging of clinical or educational API requests.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User UID who made the query" },
+        "apiName": { "type": "string", "description": "API service name queried" },
+        "endpoint": { "type": "string", "description": "API path queried" },
+        "status": { "type": "integer", "description": "HTTP response code" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Log timestamp" }
+      },
+      "required": ["userId", "apiName", "endpoint", "status"]
+    },
+    "LibraryItem": {
+      "title": "LibraryItem",
+      "description": "User-curated educational media articles and resources stored offline.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the curator owner" },
+        "itemType": { "type": "string", "description": "e.g., book, audiobook, article" },
+        "title": { "type": "string", "description": "Title of the item" },
+        "author": { "type": "string", "description": "Author or creator" },
+        "description": { "type": "string", "description": "Short description snippet" },
+        "coverUrl": { "type": "string", "description": "Cover image URL" },
+        "sourceUrl": { "type": "string", "description": "Original sourcing URL" },
+        "apiSource": { "type": "string", "description": "Wikipedia, Wikimedia, OpenLibrary etc." },
+        "localContent": { "type": "string", "description": "Full HTML or text local offline content" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Persistence timestamp" }
+      },
+      "required": ["userId", "itemType", "title", "apiSource"]
+    },
+    "SavedQuiz": {
+      "title": "SavedQuiz",
+      "description": "Offline-stored interactive multiple-choice quiz questions.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the curator owner" },
+        "category": { "type": "string", "description": "Quiz category" },
+        "difficulty": { "type": "string", "description": "Difficulty rank" },
+        "question": { "type": "string", "description": "Interactive question text" },
+        "correctAnswer": { "type": "string", "description": "Single correct answer string" },
+        "incorrectAnswers": { "type": "string", "description": "Delimited list or array of incorrect choices" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Persistence timestamp" }
+      },
+      "required": ["userId", "category", "difficulty", "question", "correctAnswer", "incorrectAnswers"]
+    },
+    "QuizScore": {
+      "title": "QuizScore",
+      "description": "Saved results and metrics for quizzes.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the student/curator" },
+        "category": { "type": "string", "description": "Quiz category" },
+        "score": { "type": "integer", "description": "Earned correct score" },
+        "totalQuestions": { "type": "integer", "description": "Total answer count" },
+        "playedAt": { "type": "string", "format": "date-time", "description": "Timestamp of quiz turn" }
+      },
+      "required": ["userId", "category", "score", "totalQuestions"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles by internal UID"
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "User curation and deescalation chat sessions"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Turn records nested in parent chat"
+    },
+    "/api_logs/{logId}": {
+      "schema": "ApiLog",
+      "description": "Logging data from Wikipedia/Wikimedia/OpenLibrary APIs"
+    },
+    "/library_items/{itemId}": {
+      "schema": "LibraryItem",
+      "description": "Curated media books/articles saved for offline use"
+    },
+    "/saved_quizzes/{quizId}": {
+      "schema": "SavedQuiz",
+      "description": "Trivia questions saved for children offline"
+    },
+    "/quiz_scores/{scoreId}": {
+      "schema": "QuizScore",
+      "description": "Highscores tracked in active educational play"
+    }
+  }
+}

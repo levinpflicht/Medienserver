@@ -1,0 +1,20 @@
+========================================================================
+GITHUB PUBLIC API KEY CONFIGURATION & INSTRUCTIONS
+========================================================================
+
+For utilizing the public GitHub APIs in this application without encountering strict rate limits of the unauthenticated GitHub API (which is capped at 60 requests per hour per IP), we configure the following environment parameters:
+
+1. Environment Variables:
+   - GITHUB_API_KEY / VITE_GITHUB_API_KEY: 
+     Your GitHub Personal Access Token (PAT) used to authenticate requests and increase the rate limit to 5000 requests per hour.
+   - GITHUB_CLIENT_ID / VITE_GITHUB_CLIENT_ID:
+     Required if executing OAuth login flows for user authorization.
+
+2. Access Patterns:
+   - Server-side: Accessed via `process.env.GITHUB_API_KEY` to securely route proxy queries.
+   - Client-side: Accessed via `import.meta.env.VITE_GITHUB_API_KEY` (requires VITE_ prefix).
+
+3. Local Setup:
+   Update your environment configurations and define variables inside your deployment secrets panel.
+
+========================================================================

@@ -1,0 +1,126 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Standard Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow create, update: if isOwner(userId)
+        && incoming().uid == request.auth.uid
+        && incoming().email is string
+        && incoming().email.size() > 0;
+    }
+
+    // Helper to verify user owns the parent chat
+    function isChatOwner(chatId) {
+      return get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+    }
+
+    // 2. Chats Collection
+    match /chats/{chatId} {
+      allow get: if isSignedIn() && isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isOwner(incoming().userId)
+        && incoming().sessionName is string
+        && incoming().sessionName.size() > 0
+        && incoming().sessionName.size() <= 200;
+      allow update: if isSignedIn()
+        && isOwner(existing().userId)
+        && isOwner(incoming().userId)
+        && incoming().sessionName is string
+        && incoming().sessionName.size() > 0
+        && incoming().sessionName.size() <= 200
+        && incoming().diff(existing()).affectedKeys().hasOnly(['sessionName']);
+      allow delete: if isSignedIn() && isOwner(existing().userId);
+    }
+
+    // 3. Messages Subcollection
+    match /chats/{chatId}/messages/{messageId} {
+      allow read, list: if isSignedIn() && isChatOwner(chatId);
+      allow create: if isSignedIn()
+        && isChatOwner(chatId)
+        && incoming().chatId == chatId
+        && incoming().role in ['user', 'model']
+        && incoming().text is string
+        && incoming().text.size() > 0;
+    }
+
+    // 4. API Logs Collection
+    match /api_logs/{logId} {
+      allow get: if isSignedIn() && isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isOwner(incoming().userId)
+        && incoming().apiName is string
+        && incoming().apiName.size() <= 100
+        && incoming().endpoint is string
+        && incoming().endpoint.size() <= 400
+        && incoming().status is int;
+    }
+
+    // 5. Library Items Collection
+    match /library_items/{itemId} {
+      allow get: if isSignedIn() && isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isOwner(incoming().userId)
+        && incoming().itemType is string
+        && incoming().title is string
+        && incoming().title.size() <= 300
+        && incoming().apiSource is string;
+      allow delete: if isSignedIn() && isOwner(existing().userId);
+    }
+
+    // 6. Saved Quizzes Collection
+    match /saved_quizzes/{quizId} {
+      allow get: if isSignedIn() && isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isOwner(incoming().userId)
+        && incoming().category is string
+        && incoming().difficulty is string
+        && incoming().question is string
+        && incoming().correctAnswer is string
+        && incoming().incorrectAnswers is string;
+      allow delete: if isSignedIn() && isOwner(existing().userId);
+    }
+
+    // 7. Quiz Scores Collection
+    match /quiz_scores/{scoreId} {
+      allow get: if isSignedIn() && isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isOwner(incoming().userId)
+        && incoming().category is string
+        && incoming().score is int
+        && incoming().totalQuestions is int;
+    }
+  }
+}
