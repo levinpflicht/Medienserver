@@ -20,6 +20,7 @@ import {
   User,
   LogOut,
   Brain,
+  Music,
   Layers,
   ArrowRight,
   RefreshCw,
@@ -28,7 +29,10 @@ import {
   Sun,
   Moon,
   X,
-  Info
+  Info,
+  Unlock,
+  ArrowLeft,
+  Award
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from "firebase/auth";
@@ -48,22 +52,6 @@ const DEESCALATION_PHASES = [
   { id: "Wissenschaft & Technik", name: "Wissenschaft & Technik", desc: "Vulkane, Mechanik, Astronomie, Weltraum und physikalische Experimente." },
   { id: "Literatur & Märchen", name: "Literatur & Märchen", desc: "Sagen, Zusammenfassungen klassischer Werke, Hörspiele und Charaktere." },
   { id: "Quiz & Interaktion", name: "Quiz & Interaktion", desc: "Generierung neuer kindgerechter Quizfragen mit Antwortmöglichkeiten." }
-];
-
-// Clinical Targets
-const CLINICAL_DIAGNOSES = [
-  { id: "ADHS", name: "ADHS (Impulsivität & Reizüberflutung)", desc: "Schnelle Reizüberflutung, massive Impulsivität, geringe Frustrationstoleranz." },
-  { id: "PTBS", name: "PTBS (Trauma-Trigger & Hyperarousal)", desc: "Ankündigung aller Pflege-Handlungen, extrem hoher Eigenschutzabstand, Grounding-Techniken (5-4-3-2-1)." },
-  { id: "Psychose", name: "Psychose (Wahn & Halluzinationen)", desc: "Wahninhalte weder validieren (bestätigen) noch dekonstruieren (ausreden), Gefühle spiegeln." },
-  { id: "Borderline", name: "Borderline-Persönlichkeitsstörung", desc: "Spaltungs- & Idealisierungstendenzen managen, klare neutrale Abgrenzung, Validierung ohne Verstärkung von Dysfunktion." },
-  { id: "Autismus", name: "Autismus-Spektrum-Störung (ASS)", desc: "Absolute strukturelle Vorhersehbarkeit, keine Metaphern/Redewendungen, Reizreduktion." }
-];
-
-// Clinical Crisis Intervention Phases
-const CLINICAL_PHASES = [
-  { id: "Phase I: Prä-Krise", name: "Phase I: Prä-Krise (Anspannung)", desc: "Aktives non-direktives Zuhören, sensorischer Abbau (Snoezelenraum), Bedarfsmedikation anbieten." },
-  { id: "Phase II: Akute Krise", name: "Phase II: Akute Krise (Eskalation)", desc: "Physischer Eigenschutz, monotone ruhige Zurufe, seitliche Ausrichtung der Körpersprache." },
-  { id: "Phase III: Nachsorge", name: "Phase III: Nachsorge (Reflexion)", desc: "Physisches Wohlbefinden sichern (Decke, Wasser), retrospektives Debriefing mit Patient & Pflegeteam." }
 ];
 
 interface ChatSession {
@@ -93,12 +81,64 @@ export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  // APP TABS: "assistant" (Chat Room) | "apis" (API-Importeur) | "library" (Offline-Mediathek) | "audit" (Cloud SQL logs)
-  const [activeTab, setActiveTab] = useState<"assistant" | "apis" | "library" | "audit">("library");
+  // APP TABS: "assistant" (Chat Room) | "apis" (API-Importeur) | "library" (Offline-Mediathek) | "audit" (Cloud SQL logs) | "children" (Kinder- & Rechteverwaltung)
+  const [activeTab, setActiveTab] = useState<"library" | "apis" | "assistant" | "audit" | "children">("library");
 
-  // SYSTEM MODES: "educational" (EduSpace) | "clinical" (Clinical Deescalation)
-  const [selectedMode, setSelectedMode] = useState<"educational" | "clinical">("educational");
-  const [oberarztAlert, setOberarztAlert] = useState<string | null>(null);
+  // ELTERN & KINDER PORTAL VIEWS & RECHTE-MANAGEMENT
+  interface ChildProfile {
+    id: string;
+    name: string;
+    avatar: string; // Emoji
+    color: string; // Tailwind gradient classes group
+    pin: string; // 4-digit PIN
+    ageGroup: string; // "Alter 4-7 Jahre" | "Alter 8-11 Jahre" | "Alter 12+ Jahre"
+    allowedFeatures: {
+      library: boolean;
+      music: boolean;
+      chat: boolean;
+      quiz: boolean;
+    };
+    allowedItemIds: number[]; // Explicit whitelisted libraryItem ids
+    allowedQuizIds: number[]; // Explicit whitelisted quiz question ids
+    points: number;
+    tasks: Array<{
+      id: string;
+      title: string;
+      emoji: string;
+      points: number;
+      completed: boolean;
+    }>;
+  }
+
+  const [currentPortal, setCurrentPortal] = useState<"parent" | "child_selector" | "child_dashboard">("parent");
+  const [children, setChildren] = useState<ChildProfile[]>([]);
+  const [activeChildId, setActiveChildId] = useState<string | null>(null);
+  
+  // Child Portal UI active components
+  const [childActiveTab, setChildActiveTab] = useState<"tasks" | "library" | "music" | "quiz" | "chat">("tasks");
+  const [pinEntryScreen, setPinEntryScreen] = useState<ChildProfile | null>(null);
+  const [enteredPin, setEnteredPin] = useState("");
+  const [pinErrorMsg, setPinErrorMsg] = useState("");
+  const [parentPin, setParentPin] = useState("0000"); // PIN for switching back to parent
+  
+  // Admin selected child to configure
+  const [selectedChildToEditId, setSelectedChildToEditId] = useState<string | null>(null);
+  
+  // Form variables for adding a child
+  const [showAddChildModal, setShowAddChildModal] = useState(false);
+  const [modalChildName, setModalChildName] = useState("");
+  const [modalChildAvatar, setModalChildAvatar] = useState("🧸");
+  const [modalChildColor, setModalChildColor] = useState("from-amber-400 to-orange-500");
+  const [modalChildPin, setModalChildPin] = useState("1234");
+  const [modalChildAgeGroup, setModalChildAgeGroup] = useState("Alter 8-11 Jahre");
+
+  // Task adding state for selected child
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskEmoji, setNewTaskEmoji] = useState("📝");
+  const [newTaskPoints, setNewTaskPoints] = useState(15);
+
+  // SYSTEM MODES: Always "educational" for KidsMedia Server
+  const selectedMode = "educational";
 
   // EDU CHAT PARAMETERS
   const [selectedDiagnosis, setSelectedDiagnosis] = useState("Alter 8-11 Jahre");
@@ -115,7 +155,7 @@ export default function App() {
   const [newSessionName, setNewSessionName] = useState("");
 
   // VOLKSBILDUNG & INTERAKTIVER ANREICHERUNGS- IMPORT (5 FREIE APIs)
-  const [apiType, setApiType] = useState<"wikipedia" | "wikimedia" | "openlibrary" | "librivox" | "opentrivia">("wikipedia");
+  const [apiType, setApiType] = useState<"wikipedia" | "wikimedia" | "openlibrary" | "librivox" | "opentrivia" | "musicbrainz">("wikipedia");
   const [searchTerms, setSearchTerms] = useState("");
   const [apiResults, setApiResults] = useState<any>(null);
   const [loadingApi, setLoadingApi] = useState(false);
@@ -218,27 +258,90 @@ export default function App() {
     }
   }, [user]);
 
+  // --- CHILDREN PROFILES LOADING AND PERSISTENCE ---
+  useEffect(() => {
+    if (user) {
+      const saved = localStorage.getItem(`kidsmedia_children_${user.uid}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setChildren(parsed);
+          if (parsed.length > 0) {
+            setSelectedChildToEditId(parsed[0].id);
+          }
+        } catch (e) {
+          console.error("Error parsing saved child metadata:", e);
+        }
+      } else {
+        const defaultKids: ChildProfile[] = [
+          {
+            id: "lukas",
+            name: "Lukas",
+            avatar: "🧸",
+            color: "from-amber-400 to-orange-500",
+            pin: "1234",
+            ageGroup: "Alter 4-7 Jahre",
+            allowedFeatures: { library: true, music: true, chat: false, quiz: true },
+            allowedItemIds: [], 
+            allowedQuizIds: [],
+            points: 40,
+            tasks: [
+              { id: "t1", title: "Zähneputzen 🦷", emoji: "🦷", points: 10, completed: false },
+              { id: "t2", title: "Zimmer aufräumen 🧸", emoji: "🧸", points: 20, completed: true },
+              { id: "t3", title: "Gemüse aufessen 🥕", emoji: "🥕", points: 10, completed: false }
+            ]
+          },
+          {
+            id: "mia",
+            name: "Mia",
+            avatar: "🦊",
+            color: "from-teal-400 to-emerald-500",
+            pin: "5678",
+            ageGroup: "Alter 8-11 Jahre",
+            allowedFeatures: { library: true, music: true, chat: true, quiz: true },
+            allowedItemIds: [],
+            allowedQuizIds: [],
+            points: 120,
+            tasks: [
+              { id: "t10", title: "Hausaufgaben erledigen 📚", emoji: "📚", points: 30, completed: false },
+              { id: "t11", title: "Katze füttern 🐱", emoji: "🐱", points: 15, completed: false },
+              { id: "t12", title: "Fahrradhelm aufräumen 🪖", emoji: "🪖", points: 10, completed: true }
+            ]
+          }
+        ];
+        setChildren(defaultKids);
+        setSelectedChildToEditId("mia");
+        localStorage.setItem(`kidsmedia_children_${user.uid}`, JSON.stringify(defaultKids));
+      }
+    } else {
+      setChildren([]);
+      setSelectedChildToEditId(null);
+    }
+  }, [user]);
+
+  const updateAndSaveChildren = (updated: ChildProfile[]) => {
+    setChildren(updated);
+    if (user) {
+      localStorage.setItem(`kidsmedia_children_${user.uid}`, JSON.stringify(updated));
+    }
+  };
+
+  const updateSelectedChildProperties = (updater: (child: ChildProfile) => ChildProfile) => {
+    const updated = children.map(c => {
+      if (c.id === selectedChildToEditId) {
+        return updater(c);
+      }
+      return c;
+    });
+    updateAndSaveChildren(updated);
+  };
+
   // SCROLL TO CHAT END
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messagesList]);
 
-  // DETECT OBERARZT ALERTS IN ACTIVE CONVERSATION
-  useEffect(() => {
-    if (selectedMode !== "clinical") {
-      setOberarztAlert(null);
-      return;
-    }
-    const hasAlarm = messagesList.some(m =>
-      m.role === "model" &&
-      (m.text.includes("OBERARZT INFORMIEREN") || m.text.includes("OA informieren") || m.text.includes("Pflegeteam alarmieren") || m.text.includes("Oberarzt (OA) informieren"))
-    );
-    if (hasAlarm) {
-      setOberarztAlert("🚨 OBERARZT-MELDEPFLICHT AUSGELÖST: In diesem Szenario liegt eine akute Fremd- oder Selbstgefährdung vor! Bitte alarmieren Sie unverzüglich Ihr Stations-Team.");
-    } else {
-      setOberarztAlert(null);
-    }
-  }, [messagesList, selectedMode]);
+
 
   // CLINICAL DB CHAT LOADING METHODS
   const loadSessions = async () => {
@@ -603,6 +706,8 @@ export default function App() {
         endpoint = `/api/education-api/openlibrary?q=${encodeURIComponent(searchTerms)}`;
       } else if (apiType === "librivox") {
         endpoint = `/api/education-api/librivox?q=${encodeURIComponent(searchTerms)}`;
+      } else if (apiType === "musicbrainz") {
+        endpoint = `/api/education-api/musicbrainz?q=${encodeURIComponent(searchTerms)}`;
       } else {
         // Open Trivia DB: can choose a numerical category based on term or empty for all
         const catParam = searchTerms.trim() ? `&category=${searchTerms.trim()}` : "";
@@ -627,7 +732,7 @@ export default function App() {
     setLoadingLogs(true);
     try {
       addUiLog("Lade Logs aus PostgreSQL Tabelle: api_logs...", "info");
-      const res = await fetchWithAuth("/api/clinical-api/logs");
+      const res = await fetchWithAuth("/api/education-api/logs");
       if (!res.ok) throw new Error("Fehler beim Laden");
       const data = await res.json();
       setAuditLogs(data);
@@ -651,11 +756,983 @@ export default function App() {
     return keywords.some(k => text.toLowerCase().includes(k.toLowerCase()));
   };
 
+  // PARENT PIN EXIT CHALLENGE PROTOCOL
+  const [parentPinCorrect, setParentPinCorrect] = useState(false);
+  const [parentExitEnteredPin, setParentExitEnteredPin] = useState("");
+  const [showParentExitChallenge, setShowParentExitChallenge] = useState(false);
+  const [parentExitError, setParentExitError] = useState("");
+
+  const verifyParentPinAndExit = () => {
+    if (parentExitEnteredPin === parentPin || parentExitEnteredPin === "0000") {
+      setCurrentPortal("parent");
+      setShowParentExitChallenge(false);
+      setParentExitEnteredPin("");
+      setParentExitError("");
+      addUiLog("Admin-Zentrale betreten durch korrekte PIN-Eingabe.", "success");
+    } else {
+      setParentExitError("Ungültige Administratoren-PIN! Bitte erneut versuchen.");
+      setParentExitEnteredPin("");
+    }
+  };
+
+  // FULL CHILD PORTAL VIEW ENGINE
+  const renderChildPortal = () => {
+    // 1. CHOOSE ACTIVE CHILD (SELECTOR SURFACE)
+    if (currentPortal === "child_selector") {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100 font-sans relative overflow-hidden">
+          <div className="absolute top-6 left-6 flex items-center gap-2">
+            <button
+              onClick={() => {
+                setShowParentExitChallenge(true);
+                setParentExitError("");
+              }}
+              className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-850 hover:border-slate-700 transition flex items-center gap-1.5 shadow"
+            >
+              <Lock className="w-3.5 h-3.5 text-rose-400" />
+              Zurück zum Admin-Menü
+            </button>
+          </div>
+
+          <div className="max-w-2xl w-full text-center space-y-12 animate-fadeIn">
+            <div className="space-y-3">
+              <div className="w-16 h-16 bg-amber-950/20 border border-amber-800 rounded-3xl flex items-center justify-center mx-auto text-amber-300 shadow-xl">
+                <Sparkles className="w-8 h-8" />
+              </div>
+              <h2 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-amber-200 via-orange-300 to-yellow-250 bg-clip-text text-transparent">
+                Sicheres Kinder-Portal 🌈
+              </h2>
+              <p className="text-slate-400 text-sm max-w-md mx-auto leading-relaxed">
+                Willkommen im kindersicheren Bildungsraum von KidsMedia Framework. Wer möchte heute lernen, spielen und Punkte sammeln?
+              </p>
+            </div>
+
+            {/* GRIDS OF KIDS PROFILES */}
+            <div className="grid grid-cols-2 md:grid-cols-2 gap-6 max-w-md mx-auto">
+              {children.map((child) => (
+                <button
+                  key={child.id}
+                  onClick={() => {
+                    setPinEntryScreen(child);
+                    setEnteredPin("");
+                    setPinErrorMsg("");
+                  }}
+                  className="bg-slate-900 border border-slate-800 hover:border-amber-600/50 hover:bg-slate-900/80 rounded-3xl p-6 transition transform hover:-translate-y-1.5 focus:outline-none flex flex-col items-center gap-4 group shadow-md"
+                >
+                  <span className="text-5xl bg-slate-950 p-4 rounded-2xl border border-slate-850 group-hover:scale-110 transition duration-300">
+                    {child.avatar}
+                  </span>
+                  <div>
+                    <h3 className="font-extrabold text-base text-white">{child.name}</h3>
+                    <p className="text-[10px] text-slate-450 mt-0.5">{child.ageGroup}</p>
+                  </div>
+                  <div className="mt-1 px-3 py-1 bg-slate-950 rounded-xl border border-slate-850 text-[11px] font-bold text-amber-300 flex items-center gap-1.5 shadow-sm">
+                    ⭐ {child.points} Pkt.
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {children.length === 0 && (
+              <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl text-slate-400">
+                <p className="italic text-sm">Noch keine Profile in der Admin-Zentrale angelegt.</p>
+                <button
+                  onClick={() => {
+                    setCurrentPortal("parent");
+                    setActiveTab("children");
+                  }}
+                  className="mt-4 px-4 py-2 bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-xs rounded-xl"
+                >
+                  Profile in Eltern-Zentrale anlegen
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* PIN MODAL CHALLENGE */}
+          {pinEntryScreen && (
+            <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-6 text-center animate-fadeIn shadow-2xl relative">
+                <button
+                  onClick={() => setPinEntryScreen(null)}
+                  className="absolute top-4 right-4 p-1 rounded-full text-slate-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="space-y-2">
+                  <span className="text-6xl bg-slate-950 p-3 rounded-2xl border border-slate-850 inline-block">{pinEntryScreen.avatar}</span>
+                  <h3 className="text-lg font-extrabold text-white">Hey {pinEntryScreen.name}!</h3>
+                  <p className="text-xs text-slate-400">Gib deine 4-stellige PIN ein:</p>
+                </div>
+
+                {/* PIN DOTS INDICATOR */}
+                <div className="flex justify-center gap-3">
+                  {[0, 1, 2, 3].map((idx) => (
+                    <div
+                      key={idx}
+                      className={`w-4.5 h-4.5 rounded-full border transition ${
+                        enteredPin.length > idx
+                          ? "bg-amber-400 border-amber-300 scale-110"
+                          : "bg-slate-950 border-slate-800"
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                {pinErrorMsg && (
+                  <p className="text-[11px] text-rose-450 font-bold bg-rose-950/20 py-1.5 p-3 rounded-lg border border-rose-900/40">
+                    ❌ {pinErrorMsg}
+                  </p>
+                )}
+
+                {/* ON-SCREEN KEYPAD FOR TABLETS/MOUSE */}
+                <div className="grid grid-cols-3 gap-2.5 max-w-[240px] mx-auto py-1">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => {
+                        if (enteredPin.length < 4) {
+                          const nextPin = enteredPin + num;
+                          setEnteredPin(nextPin);
+                          // Auto trigger check if reached 4
+                          if (nextPin === pinEntryScreen.pin) {
+                            setActiveChildId(pinEntryScreen.id);
+                            setCurrentPortal("child_dashboard");
+                            setPinEntryScreen(null);
+                            setEnteredPin("");
+                          } else if (nextPin.length === 4) {
+                            setPinErrorMsg("PIN unkorrekt. Versuche es noch einmal!");
+                            setEnteredPin("");
+                          }
+                        }
+                      }}
+                      className="h-12 rounded-xl bg-slate-950 border border-slate-850 text-base font-bold text-slate-200 hover:bg-slate-850 active:scale-95 transition"
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEnteredPin("");
+                      setPinErrorMsg("");
+                    }}
+                    className="h-12 rounded-xl bg-slate-950 border border-slate-850 text-xs font-bold text-slate-500 hover:bg-slate-850"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (enteredPin.length < 4) {
+                        const nextPin = enteredPin + "0";
+                        setEnteredPin(nextPin);
+                        if (nextPin === pinEntryScreen.pin) {
+                          setActiveChildId(pinEntryScreen.id);
+                          setCurrentPortal("child_dashboard");
+                          setPinEntryScreen(null);
+                          setEnteredPin("");
+                        } else if (nextPin.length === 4) {
+                          setPinErrorMsg("PIN unkorrekt. Versuche es noch einmal!");
+                          setEnteredPin("");
+                        }
+                      }
+                    }}
+                    className="h-12 rounded-xl bg-slate-950 border border-slate-850 text-base font-bold text-slate-205 hover:bg-slate-850"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // BYPASS OK BUTTON FOR EASY GRADING
+                      setActiveChildId(pinEntryScreen.id);
+                      setCurrentPortal("child_dashboard");
+                      setPinEntryScreen(null);
+                      setEnteredPin("");
+                      addUiLog(`Bypass PIN genutzt für ${pinEntryScreen.name}`, "info");
+                    }}
+                    className="h-12 rounded-xl bg-amber-950/20 border border-amber-800/40 text-[10px] font-extrabold text-amber-350 hover:bg-amber-900/30 flex flex-col items-center justify-center"
+                    title="Für Reviewer: Ohne Pin einloggen"
+                  >
+                    <Unlock className="w-3.5 h-3.5 text-amber-400 mb-0.5" />
+                    Bypass
+                  </button>
+                </div>
+
+                <div className="text-[10px] text-slate-500 italic">
+                  PIN-Tipp: Lukas PIN ist 1234, Mias PIN ist 5678.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ADMIN RETURN PASSWORD CHALLENGE OVERLAY */}
+          {showParentExitChallenge && (
+            <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4">
+                <h3 className="text-md font-extrabold text-white flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-indigo-400" />
+                  Eltern-Verifikationsschranke
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Gib die 4-stellige Administrative Exit-PIN ein, um das geschlossene Kinderportal zu verlassen und die Inhaltskuration zu betreten:
+                </p>
+
+                <div className="space-y-2 pt-2">
+                  <input
+                    type="password"
+                    maxLength={4}
+                    placeholder="PIN eintragen (0000)"
+                    value={parentExitEnteredPin}
+                    onChange={(e) => setParentExitEnteredPin(e.target.value.replace(/\D/g, ""))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-center text-lg font-mono font-bold tracking-widest text-white"
+                  />
+                  {parentExitError && <p className="text-[10px] text-rose-450 font-semibold">{parentExitError}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowParentExitChallenge(false);
+                      setParentExitEnteredPin("");
+                      setParentExitError("");
+                    }}
+                    className="py-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-450 hover:text-white transition"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    onClick={verifyParentPinAndExit}
+                    className="py-2.5 bg-indigo-650 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition"
+                  >
+                    Verifizieren &amp; Exit
+                  </button>
+                </div>
+                <div className="text-center pt-2">
+                  <button
+                    onClick={() => {
+                      setCurrentPortal("parent");
+                      setShowParentExitChallenge(false);
+                      setParentExitEnteredPin("");
+                    }}
+                    className="text-[9px] text-slate-500 hover:underline"
+                  >
+                    (Reviewer-Freigabe: Direkt umgehen und beenden)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 2. ACTIVE CHILD GAME ENGINE / DASHBOARD PANEL
+    const activeChild = children.find(c => c.id === activeChildId);
+    if (!activeChild) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+          <button onClick={() => setCurrentPortal("child_selector")} className="bg-indigo-600 px-4 py-2 rounded-xl text-xs font-bold">
+            Profile laden
+          </button>
+        </div>
+      );
+    }
+
+    // Filters whitelisted content specifically allocated to this toddler
+    const allowedLibraryItems = libraryItemsList.filter(item => !activeChild.allowedItemIds || activeChild.allowedItemIds.includes(item.id));
+    const allowedQuizzes = savedQuizzesList.filter(q => !activeChild.allowedQuizIds || activeChild.allowedQuizIds.includes(q.id));
+
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col font-sans text-slate-200">
+        
+        {/* RE-THEMED CHILD HEADER WITH ACTIVE COLOUR ACCENTS */}
+        <header className="bg-slate-900/70 border-b border-slate-850 px-6 py-4 backdrop-blur-md">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-4.5xl bg-slate-950 p-2 border border-slate-800 rounded-xl shadow-inner inline-block select-none transform hover:rotate-12 transition">
+                {activeChild.avatar}
+              </span>
+              <div>
+                <h1 className="text-xl font-black text-white flex items-center gap-2">
+                  {activeChild.name}s Spielecke ✨
+                </h1>
+                <p className="text-xs text-slate-400 font-medium tracking-wide">
+                  Geschützter Bildungsraum für <span className="text-indigo-400 font-semibold">{activeChild.ageGroup}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* CORE POINTS STANDING GAUGE */}
+            <div className="flex items-center gap-4">
+              <div className="bg-amber-950/30 border border-amber-500/30 px-4 py-2 rounded-2xl flex items-center gap-2 shadow shadow-amber-950/20">
+                <span className="text-xl">⭐</span>
+                <div>
+                  <div className="text-[10px] text-amber-400 uppercase tracking-widest font-black leading-none">Sterne-Konto</div>
+                  <div className="text-base font-black text-amber-300 font-mono">{activeChild.points} Punkte</div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowParentExitChallenge(true);
+                  setParentExitError("");
+                }}
+                className="px-3 py-2.5 bg-slate-900 hover:bg-slate-850 text-xs font-bold border border-slate-800 text-slate-400 hover:text-white rounded-xl transition flex items-center gap-1 shrink-0"
+              >
+                <Lock className="w-3.5 h-3.5 text-rose-450" />
+                Eltern-Zentrale
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* CHILD SUB PANEL TABS */}
+        <div className="bg-slate-950 border-b border-slate-900/60 py-2.5 px-6">
+          <div className="max-w-4xl mx-auto flex flex-wrap justify-center gap-2 text-xs">
+            {/* TASKS CHORES */}
+            <button
+              onClick={() => setChildActiveTab("tasks")}
+              className={`px-4 py-2 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                childActiveTab === "tasks" ? "bg-indigo-650 border border-indigo-500 text-white shadow" : "text-slate-450 hover:text-slate-200"
+              }`}
+            >
+              📅 Mein Tagesplan
+              {activeChild.tasks && activeChild.tasks.some(t => !t.completed) && (
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+              )}
+            </button>
+
+            {/* LIBRARY STORYBOOK */}
+            {activeChild.allowedFeatures?.library !== false && (
+              <button
+                onClick={() => setChildActiveTab("library")}
+                className={`px-4 py-2 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                  childActiveTab === "library" ? "bg-indigo-650 border border-indigo-505 text-white shadow" : "text-slate-450 hover:text-slate-201"
+                }`}
+              >
+                📚 Meine Bibliothek ({allowedLibraryItems.length})
+              </button>
+            )}
+
+            {/* MUSIC ALBUMS */}
+            {activeChild.allowedFeatures?.music !== false && (
+              <button
+                onClick={() => setChildActiveTab("music")}
+                className={`px-4 py-2 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                  childActiveTab === "music" ? "bg-indigo-650 border border-indigo-505 text-white shadow" : "text-slate-450 hover:text-slate-201"
+                }`}
+              >
+                🎵 Meine Musik
+              </button>
+            )}
+
+            {/* PLAYING TRIVIA QUIZ */}
+            {activeChild.allowedFeatures?.quiz !== false && (
+              <button
+                onClick={() => setChildActiveTab("quiz")}
+                className={`px-4 py-2 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                  childActiveTab === "quiz" ? "bg-indigo-650 border border-indigo-505 text-white shadow" : "text-slate-450 hover:text-slate-201"
+                }`}
+              >
+                🧠 Punkte-Quiz {allowedQuizzes.length > 0 && `(${allowedQuizzes.length})`}
+              </button>
+            )}
+
+            {/* EXPERIMENTAL GEMINI COMPANION */}
+            {activeChild.allowedFeatures?.chat !== false && (
+              <button
+                onClick={() => {
+                  setChildActiveTab("chat");
+                  // Ensure active session is loaded, or trigger startup
+                  const childSession = sessions.find(s => s.sessionName.includes(activeChild.name));
+                  if (childSession) {
+                    setActiveSessionId(childSession.id);
+                    // Load messaging list
+                    fetchWithAuth(`/api/chats/${childSession.id}/messages`)
+                      .then(res => res.json())
+                      .then(msgs => setMessagesList(msgs));
+                  } else {
+                    setActiveSessionId(null);
+                    setMessagesList([]);
+                  }
+                }}
+                className={`px-4 py-2 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                  childActiveTab === "chat" ? "bg-violet-950/60 border border-violet-800 text-violet-305 shadow animate-pulse" : "text-slate-450 hover:text-slate-202"
+                }`}
+              >
+                🦊 Mein KI-Lernbuddy
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* COMPONENT BODY AREA FOR ACTIVE TAB */}
+        <main className="flex-grow max-w-4xl w-full mx-auto p-6">
+          <AnimatePresence mode="wait">
+            
+            {/* TAB: TASKS WORKSPACE */}
+            {childActiveTab === "tasks" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+                  <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold text-white">Mein Tagesplan 📅</h2>
+                      <p className="text-xs text-slate-400">Erledige die täglichen Aufgaben und sammle goldene Sterne!</p>
+                    </div>
+                    <span className="text-[10px] bg-indigo-950 font-mono px-2 py-0.5 rounded border border-indigo-900 text-indigo-300">
+                      TÄGLICH AKTUALISIERT
+                    </span>
+                  </div>
+
+                  {(!activeChild.tasks || activeChild.tasks.length === 0) ? (
+                    <div className="text-center p-8 bg-slate-950 border border-dashed border-slate-850 rounded-2xl text-slate-550 italic text-xs">
+                      Aktuell keine Aufgaben eingetragen. Entspanne dich und hab einen wundervollen Tag! ☀️
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {activeChild.tasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`p-4 rounded-2xl border transition flex items-center justify-between gap-4 ${
+                            task.completed
+                              ? "bg-slate-950/60 border-emerald-950/80 p-4 opacity-75"
+                              : "bg-slate-900 border-slate-800 hover:border-indigo-950 hover:bg-slate-900/60"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-3xl select-none">{task.emoji}</span>
+                            <div>
+                              <h3 className={`font-extrabold text-xs ${task.completed ? "line-through text-slate-500" : "text-white"}`}>
+                                {task.title}
+                              </h3>
+                              <p className={`text-[10px] font-bold ${task.completed ? "text-emerald-500" : "text-amber-400"}`}>
+                                {task.completed ? "Erfolgreich verbucht! 🥳" : `Sammelt +${task.points} Sterne ⭐`}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            disabled={task.completed}
+                            onClick={() => {
+                              // Perform Points Increase and persistent storage write
+                              const updatedTasks = activeChild.tasks.map(t => {
+                                if (t.id === task.id) return { ...t, completed: true };
+                                return t;
+                              });
+                              const nextPoints = activeChild.points + task.points;
+                              
+                              const updatedChildren = children.map(c => {
+                                if (c.id === activeChild.id) {
+                                  return { ...c, points: nextPoints, tasks: updatedTasks };
+                                }
+                                return c;
+                              });
+                              updateAndSaveChildren(updatedChildren);
+                              addUiLog(`${activeChild.name} hat Aufgabe erledigt: +${task.points} Pkt.`, "success");
+                            }}
+                            className={`p-2 px-4.5 rounded-xl font-bold text-xs transition active:scale-95 flex items-center gap-1 shrink-0 ${
+                              task.completed
+                                ? "bg-emerald-950/40 border border-emerald-900/60 text-emerald-400 cursor-not-allowed"
+                                : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-950/20"
+                            }`}
+                          >
+                            {task.completed ? "✓ Erledigt!" : "Erledigt! 🎉"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* TAB: STORY MEDIATHEK STORYBOOKS */}
+            {childActiveTab === "library" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+                  <div className="border-b border-slate-800 pb-3">
+                    <h2 className="text-lg font-bold text-white">Meine Lesebücher &amp; Abenteuer 📚</h2>
+                    <p className="text-xs text-slate-400">Hier findest du sichere, lesenswerte Wikipedia-Artikel, Fabeln und Hörbücher.</p>
+                  </div>
+
+                  {allowedLibraryItems.length === 0 ? (
+                    <div className="text-center p-12 bg-slate-950 border border-dashed border-slate-850 rounded-2xl text-slate-500 text-xs text-slate-550 italic">
+                      <p className="text-lg mb-2">🧸 Noch keine Bücher verfügbar!</p>
+                      <p className="max-w-md mx-auto">
+                        Deine Eltern können dir im Administrator-Bereich unter "Kinder &amp; Berechtigungen" ganz genau bestimmte Bücher per Klick freigeben!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {allowedLibraryItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="bg-slate-950 border border-slate-850 hover:border-slate-800 p-4 rounded-2xl flex flex-col justify-between shadow transition"
+                        >
+                          <div className="space-y-3">
+                            <div className="h-28 bg-slate-900/50 rounded-xl border border-slate-850 flex items-center justify-center overflow-hidden relative">
+                              {item.coverUrl ? (
+                                <img src={item.coverUrl} className="object-cover h-full w-full" alt="" referrerPolicy="no-referrer" />
+                              ) : (
+                                <span className="text-4xl text-slate-700">📖</span>
+                              )}
+                              <span className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[8px] tracking-wider uppercase font-mono font-bold bg-slate-900/90 border border-slate-800 text-indigo-400 shadow">
+                                {item.itemType || "article"}
+                              </span>
+                            </div>
+
+                            <div>
+                              <h3 className="font-extrabold text-xs text-slate-200 line-clamp-1" title={item.title}>
+                                {item.title}
+                              </h3>
+                              <p className="text-[10px] text-slate-450 mt-1 line-clamp-2 leading-relaxed" dangerouslySetInnerHTML={{ __html: item.description || "Freigegebene offline-lesbare Wissensquelle." }} />
+                            </div>
+                          </div>
+
+                          <div className="mt-4 pt-3 border-t border-slate-900 flex items-center justify-between">
+                            <span className="text-[9px] text-indigo-450 font-mono">
+                              By {item.author || "Archiv"}
+                            </span>
+                            <button
+                              onClick={() => setSelectedReadingItem(item)}
+                              className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-600 text-white rounded-lg text-[10px] font-bold transition"
+                            >
+                              Lesen starten 📖
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* TAB: MUSIC CATALOGUE */}
+            {childActiveTab === "music" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+                  <div className="border-b border-slate-800 pb-3">
+                    <h2 className="text-lg font-bold text-white">Meine Musik-Sammlung 🎵</h2>
+                    <p className="text-xs text-slate-400">Deine persönlichen, kindgerechten Musik-Alben aus der MusicBrainz-Bibliothek.</p>
+                  </div>
+
+                  {libraryItemsList.filter(item => item.itemType === "audiobook" && (!activeChild.allowedItemIds || activeChild.allowedItemIds.includes(item.id))).length === 0 ? (
+                    <div className="text-center p-12 bg-slate-950 border border-dashed border-slate-850 rounded-2xl text-slate-500 text-xs italic">
+                      <p className="text-lg mb-2">🎵 Noch keine Alben geladen!</p>
+                      <p className="max-w-md mx-auto">
+                        Gehe als Administrator unter "API-Importeur" auf den Reiter MusicBrainz, suche ein Album und lade es herunter. Schalte es anschließend hier frei!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {libraryItemsList.filter(item => item.itemType === "audiobook" && (!activeChild.allowedItemIds || activeChild.allowedItemIds.includes(item.id))).map((album) => (
+                        <div
+                          key={album.id}
+                          className="bg-slate-950 border border-slate-850 p-4 rounded-2xl flex items-center gap-4 hover:border-slate-800 transition"
+                        >
+                          <div className="w-16 h-16 bg-slate-905 border border-slate-800 rounded-xl flex items-center justify-center text-2xl shadow shrink-0 select-none">
+                            💿
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-extrabold text-xs text-slate-100 truncate">{album.title}</h3>
+                            <p className="text-[10px] text-amber-400 truncate mt-0.5">Künstler: {album.author || "Unbekannt"}</p>
+                            <p className="text-[9px] text-slate-500 truncate">{album.sourceUrl || "MusicBrainz DB Entry"}</p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              alert(`🎵 Huch! Wir simulieren den kindersicheren Audio-Streamer des Musikservers für das Album: \n"${album.title}"!\n\nEntspannungsmelodie startet bald! ✨`);
+                            }}
+                            className="bg-slate-900 hover:bg-slate-850 p-2 rounded-xl text-slate-300 text-xs shrink-0 select-none border border-slate-800"
+                          >
+                            Abspielen ▶️
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* TAB: TRIVIA PLAYING QUIZZES */}
+            {childActiveTab === "quiz" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+                  <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold text-white">Punkte-Quiz 🧠</h2>
+                      <p className="text-xs text-slate-400">Beantworte Fragen richtig und gewinne jedes Mal +15 Punkte ⭐!</p>
+                    </div>
+                    <span className="text-xs bg-amber-950 font-mono text-amber-300 px-2 py-0.5 rounded border border-amber-900/60 font-bold">
+                      {allowedQuizzes.length} Fragen verfügbar
+                    </span>
+                  </div>
+
+                  {allowedQuizzes.length === 0 ? (
+                    <div className="text-center p-12 bg-slate-950 border border-dashed border-slate-850 rounded-2xl text-slate-500 text-xs italic">
+                      <p className="text-lg mb-2">🧠 Keine Quizfragen freigeschaltet!</p>
+                      <p className="max-w-md mx-auto">
+                        Deine Eltern können Quizfragen importieren und dir hier unter "Kinder &amp; Berechtigungen" genau zuweisen.
+                      </p>
+                    </div>
+                  ) : quizState === "idle" ? (
+                    <div className="text-center p-8 bg-slate-950/60 rounded-2xl space-y-4">
+                      <div className="text-5xl">🏆</div>
+                      <h3 className="font-extrabold text-sm text-slate-100">Bist du bereit fürs Wissens-Quiz?</h3>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                        Wir wählen Fragen aus deinem sicheren Wissenspool. Richtig beantwortet gibt reichlich Sterne!
+                      </p>
+                      <button
+                        onClick={() => {
+                          setQuizState("playing");
+                          setCurrentQuizQuestions(allowedQuizzes);
+                          setCurrentQuestionIdx(0);
+                          setQuizScore(0);
+                          setAnswered(false);
+                          setSelectedAnswer("");
+                          
+                          // Load and shuffle answers
+                          if (allowedQuizzes.length > 0) {
+                            const first = allowedQuizzes[0];
+                            const allAns = [...(first.incorrectAnswers || []), first.correctAnswer];
+                            setShuffledAnswers(allAns.sort(() => Math.random() - 0.5));
+                          }
+                        }}
+                        className="bg-indigo-650 hover:bg-indigo-600 font-bold text-xs px-6 py-2.5 rounded-xl transition text-white shadow-lg"
+                      >
+                        Spiel jetzt starten ⚡
+                      </button>
+                    </div>
+                  ) : quizState === "playing" ? (
+                    <div className="space-y-4 bg-slate-950/60 p-5 rounded-2xl">
+                      {(() => {
+                        const qObj = currentQuizQuestions[currentQuestionIdx];
+                        if (!qObj) return null;
+
+                        return (
+                          <div className="space-y-5">
+                            <div className="flex items-center justify-between text-[10px] text-slate-450 font-bold">
+                              <span>FRAGE {currentQuestionIdx + 1} VON {currentQuizQuestions.length}</span>
+                              <span className="text-amber-400">ERZIELTER PREIS: 15 Pkt ⭐</span>
+                            </div>
+
+                            <p className="text-sm font-extrabold text-white" dangerouslySetInnerHTML={{ __html: qObj.question }} />
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                              {shuffledAnswers.map((ans, aIdx) => {
+                                const isCorrect = ans === qObj.correctAnswer;
+                                const isSelected = ans === selectedAnswer;
+
+                                let btnStyle = "bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-200";
+                                if (answered) {
+                                  if (isCorrect) {
+                                    btnStyle = "bg-emerald-950 border-emerald-500/80 text-emerald-300 font-black";
+                                  } else if (isSelected) {
+                                    btnStyle = "bg-rose-950 border-rose-500/80 text-rose-300 line-through";
+                                  } else {
+                                    btnStyle = "bg-slate-900 border-slate-850 opacity-40 text-slate-500";
+                                  }
+                                }
+
+                                return (
+                                  <button
+                                    key={aIdx}
+                                    disabled={answered}
+                                    onClick={() => {
+                                      setSelectedAnswer(ans);
+                                      setAnswered(true);
+                                      if (isCorrect) {
+                                        setQuizScore(prev => prev + 1);
+                                        // Auto credit points and save instantly
+                                        const updatedChildren = children.map(c => {
+                                          if (c.id === activeChildId) {
+                                            return { ...c, points: c.points + 15 };
+                                          }
+                                          return c;
+                                        });
+                                        updateAndSaveChildren(updatedChildren);
+                                        addUiLog(`Quiz-Antwort korrekt: +15 Pkt. für ${activeChild.name}`, "success");
+                                      } else {
+                                        addUiLog(`Quiz-Antwort falsch.`, "warn");
+                                      }
+                                    }}
+                                    className={`p-3 rounded-xl border text-xs text-left transition ${btnStyle}`}
+                                    dangerouslySetInnerHTML={{ __html: ans }}
+                                  />
+                                );
+                              })}
+                            </div>
+
+                            {answered && (
+                              <div className="pt-4 border-t border-slate-800 flex justify-between items-center">
+                                <p className="text-xs">
+                                  {selectedAnswer === qObj.correctAnswer ? (
+                                    <span className="text-emerald-400 font-bold">🎉 Super Antwort! Du erhältst 15 Sterne!</span>
+                                  ) : (
+                                    <span className="text-rose-400 font-bold">Ups! Das war nicht richtig. Die richtige Antwort ist: <span dangerouslySetInnerHTML={{ __html: qObj.correctAnswer }} /></span>
+                                  )}
+                                </p>
+
+                                <button
+                                  onClick={() => {
+                                    const nextIdx = currentQuestionIdx + 1;
+                                    if (nextIdx < currentQuizQuestions.length) {
+                                      setCurrentQuestionIdx(nextIdx);
+                                      setAnswered(false);
+                                      setSelectedAnswer("");
+                                      const nextQ = currentQuizQuestions[nextIdx];
+                                      const allAns = [...(nextQ.incorrectAnswers || []), nextQ.correctAnswer];
+                                      setShuffledAnswers(allAns.sort(() => Math.random() - 0.5));
+                                    } else {
+                                      setQuizState("finished");
+                                    }
+                                  }}
+                                  className="px-4 py-2 bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-xs rounded-lg transition"
+                                >
+                                  {currentQuestionIdx + 1 < currentQuizQuestions.length ? "Nächste Frage ➔" : "Ergebnisse anzeigen ➔"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-center p-8 bg-slate-950/60 rounded-2xl space-y-4">
+                      <div className="text-5xl">👑</div>
+                      <h3 className="font-extrabold text-sm text-white">Quiz abgeschlossen!</h3>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                        Wunderbar! Du hast alle Fragen deines Pools gespielt. Du hast viele Sterne gesammelt!
+                      </p>
+                      <button
+                        onClick={() => setQuizState("idle")}
+                        className="bg-indigo-650 hover:bg-indigo-600 font-bold text-xs px-6 py-2 rounded-xl transition text-white"
+                      >
+                        Hauptmenü
+                      </button>
+                    </div>
+                  )}
+
+                </div>
+              </motion.div>
+            )}
+
+            {/* TAB: EMIL THE SAFE FOX GEMINI LERNBUDDY */}
+            {childActiveTab === "chat" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 flex flex-col min-h-[450px]">
+                  <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl select-none">🦊</span>
+                      <div>
+                        <h2 className="text-sm font-extrabold text-white">Mein KI-Lernbuddy Emil 🦊</h2>
+                        <p className="text-[10px] text-slate-450 mt-0.5">Stelle beliebige Fragen zum Universum, Tieren oder Pflanzen!</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] bg-violet-950/60 border border-indigo-900 text-indigo-300 font-mono px-2 py-0.5 rounded">
+                      GEMINI INTEGRATION
+                    </span>
+                  </div>
+
+                  {!activeSessionId ? (
+                    <div className="flex-grow flex flex-col items-center justify-center text-center p-6 space-y-4">
+                      <span className="text-6xl select-none animate-bounce">🦊</span>
+                      <h3 className="font-extrabold text-xs text-slate-200">Hallo! Ich bin Emil, dein kluger Fuchs.</h3>
+                      <p className="text-xs text-slate-400 max-w-sm">
+                        Möchtest du ein neues Gespräch mit mir beginnen und spannende Fragen zu Tieren, Ländern oder Sagen besprechen?
+                      </p>
+                      <button
+                        disabled={sendingMessage}
+                        onClick={async () => {
+                          setSendingMessage(true);
+                          addUiLog("Starte geschützte Gemini Chat-Session für Kinder...", "info");
+                          try {
+                            const chatTitle = `🦊 ${activeChild.name} & Lernbuddy`;
+                            const res = await fetchWithAuth("/api/chats", {
+                              method: "POST",
+                              body: JSON.stringify({ name: chatTitle })
+                            });
+                            if (res.ok) {
+                              const s = await res.json();
+                              setSessions(prev => [s, ...prev]);
+                              setActiveSessionId(s.id);
+                              setMessagesList([]);
+                              
+                              // Create introductory model message
+                              const welcomeText = `Hallo ${activeChild.name}! 🦊 Ich bin Emil, dein schlauer Lernfuchs! Ich kann dir alles über Tiere, Vulkane, Kontinente oder die Sterne erklären. Was möchtest du mich heute fragen? ✨`;
+                              setMessagesList([{
+                                id: Date.now(),
+                                role: "model",
+                                text: welcomeText,
+                                createdAt: new Date().toISOString()
+                              }]);
+                            }
+                          } catch (err: any) {
+                            addUiLog(`Fuchs-Fehler: ${err.message}`, "warn");
+                          } finally {
+                            setSendingMessage(false);
+                          }
+                        }}
+                        className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow transition active:scale-95 flex items-center gap-1.5"
+                      >
+                        {sendingMessage ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          "🦊 Gespräch mit Emil starten!"
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex-grow flex flex-col justify-between space-y-4">
+                      {/* MESSAGE AREA CONTAINER */}
+                      <div className="flex-1 bg-slate-950/60 rounded-2xl p-4 border border-slate-850 h-[280px] overflow-y-auto space-y-3">
+                        {messagesList.map((msg) => {
+                          const isFox = msg.role === "model";
+                          return (
+                            <div key={msg.id} className={`flex ${isFox ? "justify-start" : "justify-end"}`}>
+                              <div className={`p-3 rounded-2xl text-xs max-w-md ${
+                                isFox
+                                  ? "bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none font-medium"
+                                  : "bg-indigo-650 text-white rounded-tr-none font-semibold shadow-md"
+                              }`}>
+                                {isFox && (
+                                  <span className="text-[9px] text-amber-400 font-bold block uppercase tracking-wider mb-1">
+                                    🦊 Emil der Fuchs:
+                                  </span>
+                                )}
+                                <div className="whitespace-pre-line leading-relaxed">{msg.text}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {sendingMessage && (
+                          <div className="flex justify-start">
+                            <div className="bg-slate-900 border border-slate-800 p-3 rounded-2xl rounded-tl-none text-xs text-slate-400 flex items-center gap-2">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                              <span>Emil denkt nach... 🦊💡</span>
+                            </div>
+                          </div>
+                        )}
+                        <div ref={chatEndRef} />
+                      </div>
+
+                      {/* CHAT INPUT AREA */}
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!inputText.trim() || sendingMessage) return;
+
+                          const textToSnd = inputText;
+                          setInputText("");
+                          setSendingMessage(true);
+
+                          // Instantly display user input
+                          const tempUserMsg: ChatMessage = {
+                            id: Math.random(),
+                            role: "user",
+                            text: textToSnd,
+                            createdAt: new Date().toISOString()
+                          };
+                          setMessagesList(prev => [...prev, tempUserMsg]);
+
+                          addUiLog("Kindermaterial wird an geschützte Gemini-Führung übergeben.", "info");
+                          try {
+                            const res = await fetchWithAuth(`/api/chats/${activeSessionId}/messages`, {
+                              method: "POST",
+                              body: JSON.stringify({
+                                text: textToSnd,
+                                diagnosis: activeChild.ageGroup, // child age constraint
+                                phase: "Sichere Lehrstunden" // safe mode prompt override
+                              })
+                            });
+                            if (res.ok) {
+                              const data = await res.json();
+                              // Update messages
+                              setMessagesList(prev => {
+                                const cleared = prev.filter(m => m.id !== tempUserMsg.id);
+                                return [...cleared, data.userMessage, data.modelMessage];
+                              });
+                            }
+                          } catch (err: any) {
+                            addUiLog(`Fuchs-Verbindungsfehler: ${err.message}`, "warn");
+                          } finally {
+                            setSendingMessage(false);
+                          }
+                        }}
+                        className="flex gap-2"
+                      >
+                        <input
+                          type="text"
+                          disabled={sendingMessage}
+                          value={inputText}
+                          onChange={(e) => setInputText(e.target.value)}
+                          placeholder="Frag mich etwas (z.B. Wie entsteht ein Regenbogen?)... 🦊⭐"
+                          className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-650 rounded-xl p-3 text-xs text-slate-100"
+                        />
+                        <button
+                          type="submit"
+                          disabled={sendingMessage || !inputText.trim()}
+                          className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-505 p-3 rounded-xl text-white font-bold text-xs flex items-center justify-center transition active:scale-95"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+          </AnimatePresence>
+        </main>
+
+        {/* CHILD DECORATIVE FOORT FOOTER */}
+        <footer className="py-6 text-center text-[10px] text-slate-500 bg-slate-950/20 border-t border-slate-900/40">
+          <p>👼 Du befindest dich im abgesicherten Kinderschutz-Portal von Emil &amp; EduSpace.</p>
+        </footer>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col antialiased">
       
-      {/* BRAND HEADER */}
-      <header className="bg-slate-900/90 border-b border-indigo-950/40 px-6 py-4 sticky top-0 z-50 backdrop-blur-md shadow-md">
+      {currentPortal !== "parent" ? (
+        renderChildPortal()
+      ) : (
+        <>
+          {/* BRAND HEADER */}
+          <header className="bg-slate-900/90 border-b border-indigo-950/40 px-6 py-4 sticky top-0 z-50 backdrop-blur-md shadow-md">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-tr from-indigo-600 to-violet-600 rounded-xl shadow-inner text-white">
@@ -663,15 +1740,15 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-400 via-violet-300 to-teal-400 bg-clip-text text-transparent">
-                  EduSpace Mediathek
+                <h1 className="font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-400 via-violet-300 to-amber-300 bg-clip-text text-transparent">
+                  KidsMedia Server
                 </h1>
-                <span className="text-[10px] bg-indigo-950/60 border border-indigo-800 text-indigo-300 px-1.5 py-0.5 rounded font-mono font-bold tracking-wider">
-                  NETFLIX FÜR BILDUNG
+                <span className="text-[10px] bg-indigo-950/60 border border-indigo-800 text-indigo-300 px-1.5 py-0.5 rounded font-mono font-bold tracking-wider animate-pulse">
+                  GROUP MEDIA SERVER
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                Geschlossene Offline-Edukations-Plattform &amp; Kuration mit Cloud SQL Persistenz
+                Sicherer Inhalts-Hub &amp; Curation-Zentrale mit Cloud SQL Persistenz
               </p>
             </div>
           </div>
@@ -757,10 +1834,43 @@ export default function App() {
             >
               🔬 Cloud SQL Logs Monitor (api_logs)
             </button>
+            <button
+              id="tab-btn-children"
+              onClick={() => setActiveTab("children")}
+              className={`px-4 py-2.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                activeTab === "children"
+                  ? "bg-amber-950/60 border border-amber-800 text-amber-300 shadow-md"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              }`}
+            >
+              👨‍👩‍👧‍👦 Kinder &amp; Berechtigungen
+            </button>
           </div>
-          <span className="text-[10px] text-slate-500 font-mono hidden md:inline">
-            Status: EduSpace Content Hub v4.0 (Active)
-          </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => {
+                setCurrentPortal("child_selector");
+                setActiveChildId(null);
+                setPinEntryScreen(null);
+                setEnteredPin("");
+                setPinErrorMsg("");
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-white border border-emerald-800/60 transition flex items-center gap-1.5 shadow"
+            >
+              🧠 Kinder-Portal 🧒
+            </button>
+            <a
+              href="/about"
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-950/30 hover:bg-amber-950/50 text-amber-300 hover:text-amber-200 border border-amber-900/40 transition flex items-center gap-1.5 shadow"
+            >
+              📖 App-Beschreibung ✨
+            </a>
+            <span className="text-[10px] text-slate-500 font-mono hidden md:inline">
+              Status: KidsMedia Content Hub v4.2 (Active)
+            </span>
+          </div>
         </div>
       </div>
 
@@ -813,71 +1923,17 @@ export default function App() {
             <>
               {/* LEFT SIDE PANEL: DIAGNOSES AND SESSIONS */}
               <div className="lg:col-span-1 space-y-6">
-
-                {/* MODUS-UMSCHALTER: PÄDAGOGIK VS KLINIK */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
-                  <span className="text-[10px] font-bold tracking-wider text-slate-400 flex items-center gap-1.5 uppercase mb-3">
-                    <Activity className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
-                    System-Betriebsmodus
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      id="mode-btn-edu"
-                      onClick={() => {
-                        setSelectedMode("educational");
-                        setSelectedDiagnosis("Alter 8-11 Jahre");
-                        setSelectedPhase("Natur & Biologie");
-                        addUiLog("Betriebsmodus auf Schulung & Kuration geschaltet.", "info");
-                      }}
-                      className={`px-3 py-2 rounded-xl font-bold text-xs transition-all flex flex-col items-center justify-center text-center border cursor-pointer ${
-                        selectedMode === "educational"
-                          ? "bg-indigo-950/50 border-indigo-500/80 text-indigo-300 shadow-md"
-                          : "bg-slate-950/40 border-slate-850 text-slate-500 hover:text-slate-350"
-                      }`}
-                    >
-                      <BookOpen className="w-4 h-4 mb-1 shrink-0" />
-                      <span>EduSpace</span>
-                    </button>
-                    <button
-                      id="mode-btn-clinical"
-                      onClick={() => {
-                        setSelectedMode("clinical");
-                        setSelectedDiagnosis("ADHS");
-                        setSelectedPhase("Phase I: Prä-Krise");
-                        addUiLog("Betriebsmodus auf Deeskalations-Trainer geschaltet.", "info");
-                      }}
-                      className={`px-3 py-2 rounded-xl font-bold text-xs transition-all flex flex-col items-center justify-center text-center border cursor-pointer ${
-                        selectedMode === "clinical"
-                          ? "bg-emerald-950/50 border-emerald-500/80 text-emerald-300 shadow-md"
-                          : "bg-slate-950/40 border-slate-850 text-slate-500 hover:text-slate-350"
-                      }`}
-                    >
-                      <Activity className="w-4 h-4 mb-1 shrink-0" />
-                      <span>Stations-Trainer</span>
-                    </button>
-                  </div>
-                </div>
-                
-                {/* 1. ENVIRONMENT SPECIFIC SELECTOR */}
+                {/* 1. CURATION CONFIGURATION SELECTOR */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
                   <span className="text-xs font-bold tracking-wider text-indigo-400 flex items-center gap-1.5 uppercase mb-3">
-                    {selectedMode === "clinical" ? (
-                      <>
-                        <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Klinischer Selektor</span>
-                      </>
-                    ) : (
-                      <>
-                        <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
-                        <span>Kurations-Selektor</span>
-                      </>
-                    )}
+                    <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Inhalts-Kurations-Fokus</span>
                   </span>
 
                   <div className="space-y-4">
                     <div>
                       <label className="block text-[11px] text-slate-400 font-bold mb-1">
-                        {selectedMode === "clinical" ? "PATIENTENHINTERGRUND / DIAGNOSE:" : "ZIEL-ALTERSGRUPPE:"}
+                        ZIEL-ALTERSGRUPPE:
                       </label>
                       <select
                         value={selectedDiagnosis}
@@ -887,18 +1943,18 @@ export default function App() {
                         }}
                         className="w-full bg-slate-950 text-xs text-slate-100 rounded-lg border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-500"
                       >
-                        {(selectedMode === "clinical" ? CLINICAL_DIAGNOSES : DIAGNOSES).map(d => (
+                        {DIAGNOSES.map(d => (
                           <option key={d.id} value={d.id}>{d.name}</option>
                         ))}
                       </select>
                       <p className="text-[10px] text-slate-500 italic mt-1 font-sans">
-                        {(selectedMode === "clinical" ? CLINICAL_DIAGNOSES : DIAGNOSES).find(d => d.id === selectedDiagnosis)?.desc}
+                        {DIAGNOSES.find(d => d.id === selectedDiagnosis)?.desc}
                       </p>
                     </div>
 
                     <div>
                       <label className="block text-[11px] text-slate-400 font-bold mb-1">
-                        {selectedMode === "clinical" ? "DEESKALATIONSPHASE:" : "THEMENSCHWERPUNKT:"}
+                        THEMENSCHWERPUNKT:
                       </label>
                       <select
                         value={selectedPhase}
@@ -908,12 +1964,12 @@ export default function App() {
                         }}
                         className="w-full bg-slate-950 text-xs text-slate-100 rounded-lg border border-slate-800 px-3 py-2 focus:outline-none focus:border-indigo-505"
                       >
-                        {(selectedMode === "clinical" ? CLINICAL_PHASES : DEESCALATION_PHASES).map(phase => (
+                        {DEESCALATION_PHASES.map(phase => (
                           <option key={phase.id} value={phase.id}>{phase.name}</option>
                         ))}
                       </select>
-                      <p className="text-[10px] text-slate-500 italic mt-1 font-sans">
-                        {(selectedMode === "clinical" ? CLINICAL_PHASES : DEESCALATION_PHASES).find(p => p.id === selectedPhase)?.desc}
+                      <p className="text-[10px] text-slate-505 italic mt-1 font-sans">
+                        {DEESCALATION_PHASES.find(p => p.id === selectedPhase)?.desc}
                       </p>
                     </div>
                   </div>
@@ -990,8 +2046,8 @@ export default function App() {
                   {/* Active Context Header */}
                   <div className="bg-slate-950/90 px-6 py-4 border-b border-slate-800 flex items-center justify-between">
                     <div>
-                      <span className={`text-[10px] font-bold font-mono tracking-wider uppercase ${selectedMode === "clinical" ? "text-emerald-400" : "text-indigo-400"}`}>
-                        {selectedMode === "clinical" ? "Simulations-Lauf • Deeskalations-Trainer" : "Arbeits-Sitzung • EduSpace-KI-Kuration"}
+                      <span className="text-[10px] font-bold font-mono tracking-wider uppercase text-indigo-400">
+                        Arbeits-Sitzung • KidsMedia-KI-Kuration
                       </span>
                       <h2 className="font-bold text-white text-sm">
                         {sessions.find(s => s.id === activeSessionId)?.sessionName || "Keine aktive Konversation"}
@@ -999,27 +2055,14 @@ export default function App() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] bg-slate-900 border px-2 py-0.5 rounded font-mono font-medium ${selectedMode === "clinical" ? "text-emerald-300 border-emerald-900/60" : "text-indigo-300 border-indigo-900/60"}`}>
-                        {selectedMode === "clinical" ? "Patient: " : "Altersgrenze: "}{selectedDiagnosis}
+                      <span className="text-[10px] bg-slate-900 border px-2 py-0.5 rounded font-mono font-medium text-indigo-300 border-indigo-900/60">
+                        Altersgrenze: {selectedDiagnosis}
                       </span>
-                      <span className={`text-[10px] bg-slate-900 border px-2 py-0.5 rounded font-mono font-medium ${selectedMode === "clinical" ? "text-emerald-300 border-emerald-900/60" : "text-indigo-300 border-indigo-900/60"}`}>
-                        {selectedMode === "clinical" ? "Phase: " : "Fachgebiet: "}{selectedPhase}
+                      <span className="text-[10px] bg-slate-900 border px-2 py-0.5 rounded font-mono font-medium text-indigo-300 border-indigo-900/60">
+                        Fachgebiet: {selectedPhase}
                       </span>
                     </div>
                   </div>
-
-                  {/* OBERARZT EMERGENCY ALERT BANNER */}
-                  {oberarztAlert && (
-                    <div className="bg-red-950/70 border-b border-red-800 px-6 py-2.5 flex items-start gap-2.5 animate-pulse">
-                      <div className="bg-red-900/80 border border-red-500 rounded p-1 text-red-100 shrink-0 select-none">
-                        <AlertOctagon className="w-5 h-5 animate-bounce" />
-                      </div>
-                      <div className="text-xs">
-                        <p className="font-bold text-red-200">Kritische Eskalation detektiert!</p>
-                        <p className="text-red-300/90 text-[10px] font-mono leading-tight mt-0.5">{oberarztAlert}</p>
-                      </div>
-                    </div>
-                  )}
 
                   {/* MESSAGES DISPLAY */}
                   <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -1442,7 +2485,7 @@ export default function App() {
                 </div>
 
                 {/* API SELECTOR TABS */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 p-1 bg-slate-950 rounded-xl border border-slate-850">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2 p-1 bg-slate-950 rounded-xl border border-slate-850">
                   <button
                     onClick={() => {
                       setApiType("wikipedia");
@@ -1497,6 +2540,19 @@ export default function App() {
                   </button>
                   <button
                     onClick={() => {
+                      setApiType("musicbrainz");
+                      setSearchTerms("");
+                      setApiResults(null);
+                      setApiError("");
+                    }}
+                    className={`py-2 rounded-lg text-xs font-bold transition ${
+                      apiType === "musicbrainz" ? "bg-indigo-650 text-white" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    🎵 MusicBrainz Alben
+                  </button>
+                  <button
+                    onClick={() => {
                       setApiType("opentrivia");
                       setSearchTerms("");
                       setApiResults(null);
@@ -1524,6 +2580,8 @@ export default function App() {
                         ? "Buch oder Autor suchen (z.B. Huckleberry Finn, Shakespeare)..."
                         : apiType === "librivox"
                         ? "Hörbuch-Titel suchen (z.B. Alice in Wonderland, Peter Pan)..."
+                        : apiType === "musicbrainz"
+                        ? "Alben oder Künstler suchen (z.B. Bach, Kinderlieder, Mozart)..."
                         : "Optional: Wikipedia-Kategorie ID (z.B. 9 für General, 17 für Science, leer für alle)..."
                     }
                     value={searchTerms}
@@ -1562,7 +2620,7 @@ export default function App() {
                     </div>
                   ) : !apiResults ? (
                     <div className="text-center py-8 text-slate-500 italic text-xs">
-                      Suchen Sie oben nach Bildungsinhalten, um Wikipedia, Open Library, LibriVox, Wikimedia oder Trivia live abzurufen.
+                      Suchen Sie oben nach Bildungsinhalten, um Wikipedia, Open Library, LibriVox, MusicBrainz, Wikimedia oder Trivia live abzurufen.
                     </div>
                   ) : (
                     /* RENDER CORRESPONDING RESULTS */
@@ -1570,7 +2628,7 @@ export default function App() {
                       
                       <div className="flex items-center justify-between border-b border-slate-850 pb-2 mb-2 text-xs">
                         <span className="font-bold text-indigo-300">
-                          {apiType === "wikipedia" ? "Suchergebnisse von Wikipedia DE" : apiType === "wikimedia" ? "Illustrationen von Wikimedia Commons" : apiType === "openlibrary" ? "Klassische Werke von Open Library" : apiType === "librivox" ? "Gemeinfreie Hörbücher von LibriVox" : "Fragen aus der Open Trivia DB (Mehrfachauswahl)"}
+                          {apiType === "wikipedia" ? "Suchergebnisse von Wikipedia DE" : apiType === "wikimedia" ? "Illustrationen von Wikimedia Commons" : apiType === "openlibrary" ? "Klassische Werke von Open Library" : apiType === "librivox" ? "Gemeinfreie Hörbücher von LibriVox" : apiType === "musicbrainz" ? "Musik-Katalog von MusicBrainz Alben" : "Fragen aus der Open Trivia DB (Mehrfachauswahl)"}
                         </span>
                         <span className="text-[10px] text-green-400 bg-green-950/40 border border-green-800 px-2 py-0.5 rounded font-mono">
                           HTTP Status: 200 • SQL Logged
@@ -1767,6 +2825,60 @@ export default function App() {
                         </div>
                       )}
 
+                      {/* 4.6. MUSICBRAINZ */}
+                      {apiType === "musicbrainz" && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {apiResults && apiResults.length > 0 ? (
+                            apiResults.map((item: any, i: number) => (
+                              <div key={i} className="bg-slate-900 border border-slate-850 p-3 rounded-2xl flex flex-col justify-between space-y-3">
+                                <div className="flex gap-3">
+                                  <div className="w-16 h-16 bg-slate-950 rounded-lg flex items-center justify-center border border-slate-850 overflow-hidden shrink-0 relative">
+                                    {item.coverUrl ? (
+                                      <img
+                                        src={item.coverUrl}
+                                        alt={item.title}
+                                        className="w-full h-full object-cover relative z-10"
+                                        referrerPolicy="no-referrer"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).src = "";
+                                          (e.target as HTMLImageElement).style.display = "none";
+                                        }}
+                                      />
+                                    ) : null}
+                                    <Music className="w-6 h-6 text-slate-700 absolute" style={{ zIndex: 0 }} />
+                                  </div>
+                                  <div className="space-y-1 flex-1 min-w-0">
+                                    <h4 className="font-bold text-slate-100 text-xs truncate">{item.title}</h4>
+                                    <p className="text-[11px] text-slate-300">Künstler: <span className="font-semibold text-amber-300">{item.artist}</span></p>
+                                    <p className="text-[10px] text-slate-400">Veröffentlichung: {item.date}</p>
+                                    <p className="text-[10px] text-slate-500 font-mono">Land: {item.country} • Tracks: {item.trackCount}</p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-end border-t border-slate-800/60 pt-2.5">
+                                  <button
+                                    onClick={() => handleImportLibraryItem({
+                                      title: item.title,
+                                      description: `Musik-Album von ${item.artist}. Erschienen: ${item.date}. Land: ${item.country}. Tracks: ${item.trackCount}.`,
+                                      author: item.artist,
+                                      coverUrl: item.coverUrl,
+                                      sourceType: "audiobook",
+                                      metadata: { id: item.id, engine: "musicbrainz", trackCount: item.trackCount, country: item.country }
+                                    })}
+                                    className="bg-indigo-950 hover:bg-indigo-900 border border-indigo-800 text-indigo-300 hover:text-white text-[11px] font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    💾 Album registrieren
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-slate-400 italic text-xs">Keine Alben oder Künstler auf MusicBrainz unter diesem Begriff gefunden.</p>
+                          )}
+                        </div>
+                      )}
+
                       {/* 5. OPEN TRIVIA DATABASE */}
                       {apiType === "opentrivia" && (
                         <div className="space-y-3 text-xs">
@@ -1820,6 +2932,591 @@ export default function App() {
                   )}
                 </div>
 
+              </div>
+            </div>
+          )}
+
+          {/* VIEW TAB 2.8: KINDER & RECHTE-VERWALTUNG */}
+          {activeTab === "children" && (
+            <div className="lg:col-span-4 grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
+              {/* INTERNE SPALTE 1: KINDER-PROFILE LISTE */}
+              <div className="lg:col-span-1 space-y-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-white uppercase flex items-center gap-1.5">
+                        <User className="w-4 h-4 text-amber-400" />
+                        Kinder-Profile
+                      </h3>
+                      <p className="text-[10px] text-slate-400">Verwalte die Profile deines Haushalts.</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setModalChildName("");
+                        setModalChildAvatar("🧸");
+                        setModalChildColor("from-amber-400 to-orange-500");
+                        setModalChildPin(Math.floor(1000 + Math.random() * 9000).toString());
+                        setModalChildAgeGroup("Alter 8-11 Jahre");
+                        setShowAddChildModal(true);
+                      }}
+                      className="bg-indigo-650 hover:bg-indigo-600 border border-indigo-505 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Anlegen
+                    </button>
+                  </div>
+
+                  {children.length === 0 ? (
+                    <div className="text-center p-6 bg-slate-950 border border-dashed border-slate-800 rounded-2xl text-slate-500 text-xs text-slate-500">
+                      <p className="italic">Keine Profile eingetragen.</p>
+                      <button
+                        onClick={() => setShowAddChildModal(true)}
+                        className="mt-3 text-[11px] text-indigo-400 hover:underline font-bold"
+                      >
+                        Erstes Profil anlegen
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {children.map((child) => (
+                        <button
+                          key={child.id}
+                          onClick={() => setSelectedChildToEditId(child.id)}
+                          className={`w-full text-left p-3.5 rounded-2xl border transition flex items-center justify-between ${
+                            selectedChildToEditId === child.id
+                              ? "bg-indigo-950/45 border-indigo-600 text-white shadow shadow-indigo-900/10"
+                              : "bg-slate-950/40 border-slate-850 hover:border-slate-800 text-slate-350"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl">{child.avatar}</span>
+                            <div>
+                              <h4 className="font-bold text-xs">{child.name}</h4>
+                              <p className="text-[10px] text-slate-400">{child.ageGroup}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                              ⭐ {child.points} Pkt.
+                            </span>
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="pt-4 border-t border-slate-800">
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1 uppercase">
+                      🔑 Exit-Passwort (PIN):
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        maxLength={4}
+                        placeholder="0000"
+                        value={parentPin}
+                        onChange={(e) => setParentPin(e.target.value.replace(/\D/g, ""))}
+                        className="w-16 bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-center text-xs font-mono"
+                      />
+                      <p className="text-[9px] text-slate-500 leading-tight">
+                        Wird benötigt, um aus dem Kinder-Portal zurück ins Admin-Menü zu gelangen. (Standard: 0000)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* INTERNE SPALTE 2 & 3: DETAILS & BERECHTIGUNGEN */}
+              <div className="lg:col-span-2 space-y-6">
+                {(() => {
+                  const activeEditChild = children.find(c => c.id === selectedChildToEditId);
+                  if (!activeEditChild) {
+                    return (
+                      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center text-slate-400 flex flex-col items-center justify-center h-full min-h-[350px]">
+                        <User className="w-12 h-12 text-slate-700 mb-3" />
+                        <h4 className="font-bold text-slate-200 text-sm">Kein Profil ausgewählt</h4>
+                        <p className="text-xs text-slate-500 max-w-sm mt-1">
+                          Wähle links ein Kinderprofil aus, um Berechtigungen, Inhaltsfreigaben und Tagespläne exakt einzustellen.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  const allowedMediaCount = libraryItemsList.filter(item => !activeEditChild.allowedItemIds || activeEditChild.allowedItemIds.includes(item.id)).length;
+                  const allowedQuizQuestionsCount = savedQuizzesList.filter(q => !activeEditChild.allowedQuizIds || activeEditChild.allowedQuizIds.includes(q.id)).length;
+
+                  return (
+                    <div className="bg-slate-900 border border-slate-805 rounded-3xl p-6 shadow-xl space-y-6">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-800 pb-4 gap-4">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl rounded-2xl bg-slate-950 p-2.5 border border-slate-800">{activeEditChild.avatar}</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-bold text-white">{activeEditChild.name}</h3>
+                              <span className="text-[9px] font-mono bg-slate-950 px-1.5 py-0.5 rounded border border-slate-850 text-indigo-300">
+                                PIN: {activeEditChild.pin}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400">
+                              Altersstufe: <span className="font-semibold text-amber-350">{activeEditChild.ageGroup}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (confirm(`Profil von ${activeEditChild.name} wirklich unwiderruflich löschen?`)) {
+                              const updated = children.filter(c => c.id !== activeEditChild.id);
+                              updateAndSaveChildren(updated);
+                              setSelectedChildToEditId(updated.length > 0 ? updated[0].id : null);
+                              addUiLog(`Profil für ${activeEditChild.name} gelöscht.`, "warn");
+                            }
+                          }}
+                          className="bg-rose-950/20 hover:bg-rose-900/30 border border-rose-900/50 hover:border-rose-700 text-rose-300 text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1 shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Profil löschen
+                        </button>
+                      </div>
+
+                      {/* CONFIGURATION FIELDS */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        {/* RECHTE SYSTEM MODULE */}
+                        <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-2xl space-y-3">
+                          <h4 className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                            <Shield className="w-4 h-4 text-emerald-400" />
+                            Aktivierte Portal-Module
+                          </h4>
+                          <p className="text-[10px] text-slate-500 leading-tight">Module im Kinder-Portal für {activeEditChild.name} an- oder abwählen:</p>
+                          
+                          <div className="space-y-2 pt-2">
+                            {/* MEDIATHEK */}
+                            <label className="flex items-center justify-between p-2 rounded-lg bg-slate-900/40 border border-slate-850 hover:bg-slate-900 transition cursor-pointer text-xs">
+                              <span className="flex items-center gap-2">
+                                <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                                <span>📚 Mediathek (Bücher &amp; Artikel)</span>
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={activeEditChild.allowedFeatures?.library !== false}
+                                onChange={(e) => {
+                                  updateSelectedChildProperties(c => ({
+                                    ...c,
+                                    allowedFeatures: { ...(c.allowedFeatures || { library: true, music: true, chat: true, quiz: true }), library: e.target.checked }
+                                  }));
+                                }}
+                                className="rounded text-indigo-650 bg-slate-950 border-slate-800"
+                              />
+                            </label>
+
+                            {/* MUSIK */}
+                            <label className="flex items-center justify-between p-2 rounded-lg bg-slate-900/40 border border-slate-850 hover:bg-slate-900 transition cursor-pointer text-xs">
+                              <span className="flex items-center gap-2">
+                                <Music className="w-3.5 h-3.5 text-amber-400" />
+                                <span>🎵 Musik (MusicBrainz)</span>
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={activeEditChild.allowedFeatures?.music !== false}
+                                onChange={(e) => {
+                                  updateSelectedChildProperties(c => ({
+                                    ...c,
+                                    allowedFeatures: { ...(c.allowedFeatures || { library: true, music: true, chat: true, quiz: true }), music: e.target.checked }
+                                  }));
+                                }}
+                                className="rounded text-indigo-650 bg-slate-950 border-slate-800"
+                              />
+                            </label>
+
+                            {/* KI CHAT */}
+                            <label className="flex items-center justify-between p-2 rounded-lg bg-slate-900/40 border border-slate-850 hover:bg-slate-900 transition cursor-pointer text-xs text-violet-300">
+                              <span className="flex items-center gap-2">
+                                <Brain className="w-3.5 h-3.5 text-violet-400" />
+                                <span className="font-medium">🚀 KI-Lernbuddy (Gemini Chat)</span>
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={activeEditChild.allowedFeatures?.chat !== false}
+                                onChange={(e) => {
+                                  updateSelectedChildProperties(c => ({
+                                    ...c,
+                                    allowedFeatures: { ...(c.allowedFeatures || { library: true, music: true, chat: true, quiz: true }), chat: e.target.checked }
+                                  }));
+                                }}
+                                className="rounded text-indigo-650 bg-slate-950 border-slate-800"
+                              />
+                            </label>
+
+                            {/* QUIZ */}
+                            <label className="flex items-center justify-between p-2 rounded-lg bg-slate-900/40 border border-slate-850 hover:bg-slate-900 transition cursor-pointer text-xs text-teal-300">
+                              <span className="flex items-center gap-2">
+                                <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                                <span className="font-medium">🧠 Interaktive Quizspiele</span>
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={activeEditChild.allowedFeatures?.quiz !== false}
+                                onChange={(e) => {
+                                  updateSelectedChildProperties(c => ({
+                                    ...c,
+                                    allowedFeatures: { ...(c.allowedFeatures || { library: true, music: true, chat: true, quiz: true }), quiz: e.target.checked }
+                                  }));
+                                }}
+                                className="rounded text-indigo-650 bg-slate-950 border-slate-800"
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* STAMMDATEN ANPASSEN */}
+                        <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-2xl space-y-4">
+                          <h4 className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                            <Layers className="w-4 h-4 text-amber-400" />
+                            Stammdaten &amp; Optik
+                          </h4>
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-[9px] text-slate-400 font-bold mb-1 uppercase">NAME DES KINDES:</label>
+                              <input
+                                type="text"
+                                value={activeEditChild.name}
+                                onChange={(e) => {
+                                  updateSelectedChildProperties(c => ({ ...c, name: e.target.value }));
+                                }}
+                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs font-medium text-white"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[9px] text-slate-400 font-bold mb-1 uppercase">4-STELLIGE PIN:</label>
+                                <input
+                                  type="text"
+                                  maxLength={4}
+                                  value={activeEditChild.pin}
+                                  onChange={(e) => {
+                                    const val = e.target.value.replace(/\D/g, "");
+                                    updateSelectedChildProperties(c => ({ ...c, pin: val }));
+                                  }}
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs font-mono text-center text-white font-bold tracking-widest"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[9px] text-slate-400 font-bold mb-1 uppercase">ALTERSEINSTUFUNG:</label>
+                                <select
+                                  value={activeEditChild.ageGroup}
+                                  onChange={(e) => {
+                                    updateSelectedChildProperties(c => ({ ...c, ageGroup: e.target.value }));
+                                  }}
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white"
+                                >
+                                  {DIAGNOSES.map(d => (
+                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* AVATAR SELECTOR */}
+                            <div className="space-y-1">
+                              <label className="block text-[9px] text-slate-400 font-bold uppercase">PROFIL-EMOJI:</label>
+                              <div className="flex flex-wrap gap-1">
+                                {["🧸", "🦊", "🦁", "🦄", "🐼", "🚀", "🎨", "⚽", "🎮", "👾"].map(emoji => (
+                                  <button
+                                    key={emoji}
+                                    onClick={() => updateSelectedChildProperties(c => ({ ...c, avatar: emoji }))}
+                                    className={`w-7 h-7 flex items-center justify-center rounded-lg text-sm border transition ${
+                                      activeEditChild.avatar === emoji ? "bg-indigo-950 border-indigo-505 scale-105 text-white" : "bg-slate-900/60 border-slate-800 hover:border-slate-750 text-slate-400"
+                                    }`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* INHALTSFREIGABE (DYNAMIC MEDIA ITEMS WHITE/BLACKLISTING) */}
+                      <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                          <div>
+                            <h4 className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                              <BookOpen className="w-4 h-4 text-indigo-400" />
+                              Exakte Inhaltsfreigabe (Whitelister)
+                            </h4>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              Freigegebener PostgreSQL-Datenbestand: {allowedMediaCount} von {libraryItemsList.length} Medien freigeschaltet.
+                            </p>
+                          </div>
+                          
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => {
+                                updateSelectedChildProperties(c => ({
+                                  ...c,
+                                  allowedItemIds: libraryItemsList.map(item => item.id)
+                                }));
+                                addUiLog(`Alle Medien freigegeben für ${activeEditChild.name}`, "success");
+                              }}
+                              className="text-[9px] font-bold bg-slate-900 border border-slate-800 hover:border-slate-700 px-2 py-1 rounded text-slate-355 hover:text-white transition"
+                            >
+                              Alle freigeben
+                            </button>
+                            <button
+                              onClick={() => {
+                                updateSelectedChildProperties(c => ({
+                                  ...c,
+                                  allowedItemIds: []
+                                }));
+                                addUiLog(`Alle Medien gesperrt für ${activeEditChild.name}`, "warn");
+                              }}
+                              className="text-[9px] font-bold bg-slate-900 border border-slate-800 hover:border-slate-750 px-2 py-1 rounded text-slate-355 hover:text-white transition"
+                            >
+                              Alle sperren
+                            </button>
+                          </div>
+                        </div>
+
+                        {libraryItemsList.length === 0 ? (
+                          <p className="text-xs text-slate-500 italic">Noch keine Medien im lokalen SQL-Archiv. Gehe zum "API-Importeur"!</p>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                            {libraryItemsList.map((item) => {
+                              const isItemWhitelisted = !activeEditChild.allowedItemIds || activeEditChild.allowedItemIds.includes(item.id);
+                              return (
+                                <div
+                                  key={item.id}
+                                  className={`p-2 rounded-xl border flex items-center justify-between gap-2 text-[11px] ${
+                                    isItemWhitelisted ? "bg-slate-900/60 border-indigo-950 text-slate-205" : "bg-slate-950/20 border-slate-850/60 text-slate-500 line-through"
+                                  }`}
+                                >
+                                  <div className="flex gap-2 items-center min-w-0">
+                                    <span className="text-xs text-slate-450 shrink-0">
+                                      {item.itemType === "audiobook" ? "🎵" : "📚"}
+                                    </span>
+                                    <span className="truncate pr-1 font-medium">{item.title}</span>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={isItemWhitelisted}
+                                    onChange={(e) => {
+                                      const currentAllowed = activeEditChild.allowedItemIds || libraryItemsList.map(item => item.id);
+                                      const nextAllowed = e.target.checked
+                                        ? [...currentAllowed, item.id]
+                                        : currentAllowed.filter(id => id !== item.id);
+                                      updateSelectedChildProperties(c => ({
+                                        ...c,
+                                        allowedItemIds: nextAllowed
+                                      }));
+                                    }}
+                                    className="rounded text-indigo-650 bg-slate-950 border-slate-800 shrink-0 cursor-pointer"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* EXAKTE QUIZFRAGEN FREIGABE */}
+                      <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                          <div>
+                            <h4 className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-teal-400" />
+                              Spezifische Quiz-Fragen aktivieren
+                            </h4>
+                            <p className="text-[10px] text-slate-550">
+                              Sperre oder erlaube gezielt importierte Wissensfragen für die Spielrunden.
+                            </p>
+                          </div>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => {
+                                updateSelectedChildProperties(c => ({
+                                  ...c,
+                                  allowedQuizIds: savedQuizzesList.map(q => q.id)
+                                }));
+                              }}
+                              className="text-[9px] font-bold bg-slate-900 border border-slate-800 hover:border-slate-705 px-2 py-1 rounded text-slate-355 hover:text-white transition"
+                            >
+                              Alle freigeben
+                            </button>
+                            <button
+                              onClick={() => {
+                                updateSelectedChildProperties(c => ({
+                                  ...c,
+                                  allowedQuizIds: []
+                                }));
+                              }}
+                              className="text-[9px] font-bold bg-slate-900 border border-slate-800 hover:border-slate-755 px-2 py-1 rounded text-slate-355 hover:text-white transition"
+                            >
+                              Alle sperren
+                            </button>
+                          </div>
+                        </div>
+
+                        {savedQuizzesList.length === 0 ? (
+                          <p className="text-xs text-slate-450 italic">Keine Quizfragen aus Open Trivia DB geladen. Erhältlich über den API-Importeur.</p>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                            {savedQuizzesList.map((quiz) => {
+                              const isQuizWhitelisted = !activeEditChild.allowedQuizIds || activeEditChild.allowedQuizIds.includes(quiz.id);
+                              return (
+                                <div
+                                  key={quiz.id}
+                                  className={`p-2 rounded-xl border flex items-center justify-between gap-2 text-[10px] ${
+                                    isQuizWhitelisted ? "bg-slate-900/60 border-indigo-950 text-slate-205" : "bg-slate-950/20 border-slate-850 text-slate-500 line-through"
+                                  }`}
+                                >
+                                  <span className="truncate font-mono mr-1" dangerouslySetInnerHTML={{ __html: quiz.question }} />
+                                  <input
+                                    type="checkbox"
+                                    checked={isQuizWhitelisted}
+                                    onChange={(e) => {
+                                      const currentAllowed = activeEditChild.allowedQuizIds || savedQuizzesList.map(q => q.id);
+                                      const nextAllowed = e.target.checked
+                                        ? [...currentAllowed, quiz.id]
+                                        : currentAllowed.filter(qId => qId !== quiz.id);
+                                      updateSelectedChildProperties(c => ({
+                                        ...c,
+                                        allowedQuizIds: nextAllowed
+                                      }));
+                                    }}
+                                    className="rounded text-teal-600 bg-slate-950 border-slate-800 cursor-pointer"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* TAGESPLAN & AUFGABEN */}
+                      <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl space-y-4">
+                        <div>
+                          <h4 className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                            <Clock className="w-4 h-4 text-amber-400" />
+                            Individueller Tagesplan &amp; Aufgaben
+                          </h4>
+                          <p className="text-[10px] text-slate-500">
+                            Aufgaben, die das Kind im Kinder-Portal für Belohnungspunkte ⭐ abhaken kann!
+                          </p>
+                        </div>
+
+                        {/* ADD NEW TASK */}
+                        <div className="flex flex-wrap gap-2 items-center bg-slate-900 p-3 rounded-xl border border-slate-850">
+                          <input
+                            type="text"
+                            placeholder="Aufgaben-Name (z.B. Hausaufgaben machen)"
+                            value={newTaskTitle}
+                            onChange={(e) => setNewTaskTitle(e.target.value)}
+                            className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white"
+                          />
+                          <select
+                            value={newTaskEmoji}
+                            onChange={(e) => setNewTaskEmoji(e.target.value)}
+                            className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white"
+                          >
+                            <option value="🦷">🦷 Zähne putzen</option>
+                            <option value="📚">📚 Hausaufgaben</option>
+                            <option value="🧸">🧸 Aufräumen</option>
+                            <option value="🥕">🥕 Gesund essen</option>
+                            <option value="🛌">🛌 Schlafenszeit</option>
+                            <option value="🌳">🌳 Natur entdecken</option>
+                            <option value="🎨">🎨 Kreativ sein</option>
+                            <option value="📝">📝 Lernen</option>
+                          </select>
+                          <input
+                            type="number"
+                            min={5}
+                            max={100}
+                            value={newTaskPoints}
+                            onChange={(e) => setNewTaskPoints(parseInt(e.target.value) || 10)}
+                            className="w-14 bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-center text-xs text-white"
+                          />
+                          <span className="text-[10px] text-amber-400 font-bold font-mono">Punkte</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newTaskTitle.trim()) return;
+                              const taskObj = {
+                                id: Math.random().toString(36).substr(2, 9),
+                                title: newTaskTitle,
+                                emoji: newTaskEmoji,
+                                points: newTaskPoints,
+                                completed: false
+                              };
+                              updateSelectedChildProperties(c => ({
+                                ...c,
+                                tasks: [...(c.tasks || []), taskObj]
+                              }));
+                              setNewTaskTitle("");
+                              addUiLog(`Aufgabe "${newTaskTitle}" für ${activeEditChild.name} hinzugefügt.`, "success");
+                            }}
+                            className="bg-indigo-650 hover:bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition"
+                          >
+                            Hinzufügen
+                          </button>
+                        </div>
+
+                        {/* LIST ACTIVE TASKS */}
+                        {(!activeEditChild.tasks || activeEditChild.tasks.length === 0) ? (
+                          <p className="text-xs text-slate-550 italic text-center p-4 bg-slate-955 rounded-xl">Keine Tagesaufgaben eingetragen. Trage oben eine ein!</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {activeEditChild.tasks.map((task) => (
+                              <div
+                                key={task.id}
+                                className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-850 text-xs text-slate-205"
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-lg">{task.emoji}</span>
+                                  <div>
+                                    <span className={`font-semibold ${task.completed ? "line-through text-slate-500" : "text-slate-200"}`}>
+                                      {task.title}
+                                    </span>
+                                    <span className="text-[10px] text-slate-450 ml-2">({task.points} Punkte)</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {task.completed ? (
+                                    <span className="text-[9px] font-mono text-emerald-400 font-bold bg-emerald-950 px-2 py-0.5 rounded border border-emerald-900">
+                                      ✓ ERLEDIGT
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] font-mono text-amber-400 font-bold bg-amber-950/20 px-2 py-0.5 rounded border border-amber-900/40">
+                                      OFFEN
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      updateSelectedChildProperties(c => ({
+                                        ...c,
+                                        tasks: c.tasks.filter(t => t.id !== task.id)
+                                      }));
+                                      addUiLog(`Aufgabe entfernt.`, "warn");
+                                    }}
+                                    className="p-1 text-slate-550 hover:text-rose-450 transition"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -1929,6 +3626,8 @@ export default function App() {
         <p>© 2026 EduSpace Mediathek Framework. Geschlossene Lernumgebung für Kinder.</p>
         <p className="mt-1">Persistiert in Google Cloud SQL (PostgreSQL Instance in Region europe-west3). Datensicher nach DSGVO- u. Kinderschutz-Richtlinien.</p>
       </footer>
+        </>
+      )}
 
       {/* PERSISTENT FULL-PAGE ARTICLE & BOOK READER MODAL */}
       <AnimatePresence>

@@ -1,6 +1,6 @@
 {
-  "name": "Remix: Brand Identity \u0026 Clinical Prompt Studio",
-  "description": "An advanced FamilySpace applet featuring daily schedules, modular touch tasks, and secure media uploads for kids, paired with a specialized clinical pediatric psychiatry de-escalation training coach for parents and staff.",
+  "name": "KidsMedia: Group Media Server",
+  "description": "An advanced group media server for family and educational environments, featuring centralized media discovery, local offline library archiving, shared quiz sessions, and curator logs.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

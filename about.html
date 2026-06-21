@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FamilySpace – App-Beschreibung</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,300;1,9..144,700&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+/* ── TOKENS ────────────────────────────────────────── */
+:root {
+  --ink:      #0e1017;
+  --ink2:     #1a1d28;
+  --surface:  #f4f1ec;
+  --paper:    #faf8f4;
+  --muted:    #7a7d8a;
+  --rule:     #dddad4;
+  --amber:    #c9720a;
+  --amber-bg: #fdf3e7;
+  --indigo:   #3730a3;
+  --green:    #0d6e4f;
+  --green-bg: #edfaf5;
+  --rose:     #be123c;
+  --display:  'Fraunces', Georgia, serif;
+  --body:     'DM Sans', system-ui, sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── TYPOGRAPHY ─────────────────────────────────────── */
+.display {
+  font-family: var(--display);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+.display-italic {
+  font-family: var(--display);
+  font-weight: 300;
+  font-style: italic;
+  letter-spacing: -0.02em;
+}
+h2 { font-family: var(--display); font-weight: 700; letter-spacing: -0.02em; }
+h3 { font-family: var(--body); font-weight: 600; }
+.mono { font-family: var(--mono); }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.muted { color: var(--muted); }
+
+/* ── LAYOUT ─────────────────────────────────────────── */
+.container { max-width: 900px; margin: 0 auto; padding: 0 28px; }
+.container-wide { max-width: 1100px; margin: 0 auto; padding: 0 28px; }
+section { padding: 80px 0; border-bottom: 1px solid var(--rule); }
+section:last-child { border-bottom: none; }
+
+/* ── NAV ────────────────────────────────────────────── */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(250,248,244,0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 28px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo { font-family: var(--display); font-weight: 700; font-size: 1.1rem; text-decoration: none; color: var(--ink); }
+.nav-links { display: flex; gap: 24px; list-style: none; }
+.nav-links a { color: var(--muted); text-decoration: none; font-size: 0.85rem; transition: color 0.15s; }
+.nav-links a:hover { color: var(--ink); }
+.nav-badge {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+  background: var(--amber-bg); color: var(--amber);
+  border: 1px solid #f0d4b0; border-radius: 99px; padding: 4px 12px;
+}
+
+/* ── HERO ────────────────────────────────────────────── */
+#hero {
+  padding: 100px 0 80px;
+  border-bottom: 1px solid var(--rule);
+  position: relative; overflow: hidden;
+}
+.hero-eyebrow { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+.hero-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+.hero-title { font-size: clamp(2.8rem, 6vw, 5.2rem); margin-bottom: 24px; }
+.hero-title em { color: var(--amber); font-style: normal; }
+.hero-desc { font-size: 1.1rem; color: var(--muted); max-width: 560px; line-height: 1.7; margin-bottom: 36px; }
+.hero-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 40px; }
+.tag {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+  padding: 5px 12px; border-radius: 99px; border: 1px solid var(--rule);
+  color: var(--muted); background: var(--surface);
+}
+.tag.highlight { background: var(--amber-bg); color: var(--amber); border-color: #f0d4b0; }
+.hero-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; max-width: 560px; }
+.stat { padding: 20px; border-right: 1px solid var(--rule); }
+.stat:last-child { border-right: none; }
+.stat-value { font-family: var(--display); font-size: 1.8rem; font-weight: 900; color: var(--ink); }
+.stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+/* ── SECTION HEADER ─────────────────────────────────── */
+.sec-header { margin-bottom: 48px; }
+.sec-header .eyebrow { margin-bottom: 10px; }
+.sec-header h2 { font-size: clamp(1.6rem, 3vw, 2.4rem); }
+.sec-header p { color: var(--muted); margin-top: 10px; font-size: 0.95rem; max-width: 540px; }
+
+/* ── PROBLEM / LÖSUNG ───────────────────────────────── */
+.problem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.problem-card, .solution-card {
+  padding: 28px; border-radius: 14px; border: 1px solid var(--rule);
+}
+.problem-card { background: #fff6f8; border-color: #f8d7df; }
+.solution-card { background: var(--green-bg); border-color: #b8e8d8; }
+.card-icon { font-size: 1.8rem; margin-bottom: 12px; }
+.card-title { font-weight: 700; font-size: 1rem; margin-bottom: 8px; }
+.card-title.problem-title { color: var(--rose); }
+.card-title.solution-title { color: var(--green); }
+.card-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.card-list li { font-size: 0.88rem; color: var(--muted); display: flex; gap: 8px; }
+.card-list li::before { content: '→'; flex-shrink: 0; }
+
+/* ── FEATURES GRID ──────────────────────────────────── */
+.features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.feature-card {
+  padding: 24px; border-radius: 14px;
+  border: 1px solid var(--rule); background: var(--surface);
+  transition: border-color 0.2s, transform 0.2s;
+}
+.feature-card:hover { border-color: var(--ink2); transform: translateY(-2px); }
+.feature-icon { font-size: 1.6rem; margin-bottom: 12px; }
+.feature-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; }
+.feature-desc { font-size: 0.82rem; color: var(--muted); line-height: 1.55; }
+.feature-badge {
+  display: inline-block; font-family: var(--mono); font-size: 0.65rem; font-weight: 600;
+  padding: 2px 8px; border-radius: 4px; margin-top: 10px;
+}
+.fb-green { background: var(--green-bg); color: var(--green); }
+.fb-amber { background: var(--amber-bg); color: var(--amber); }
+.fb-indigo { background: #ede9fe; color: var(--indigo); }
+
+/* ── USERFLOWS ──────────────────────────────────────── */
+.flows-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.flow-card { padding: 28px; border-radius: 14px; border: 1px solid var(--rule); background: var(--surface); }
+.flow-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.flow-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+}
+.flow-eltern { background: #ede9fe; }
+.flow-kind   { background: #d1fae5; }
+.flow-title  { font-weight: 700; font-size: 1rem; }
+.flow-sub    { font-size: 0.78rem; color: var(--muted); }
+.flow-steps  { display: flex; flex-direction: column; gap: 0; }
+.flow-step   { display: flex; gap: 12px; padding: 10px 0; position: relative; }
+.flow-step:not(:last-child)::after {
+  content: ''; position: absolute; left: 14px; top: 38px;
+  width: 1px; height: calc(100% - 10px); background: var(--rule);
+}
+.step-num {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  border: 1px solid var(--rule); background: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 600; z-index: 1;
+}
+.step-text { font-size: 0.85rem; padding-top: 4px; line-height: 1.5; }
+
+/* ── TECH STACK ─────────────────────────────────────── */
+.stack-table { width: 100%; border-collapse: collapse; }
+.stack-table th {
+  text-align: left; padding: 10px 16px;
+  font-family: var(--mono); font-size: 0.68rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
+  border-bottom: 2px solid var(--ink2); background: var(--surface);
+}
+.stack-table td { padding: 14px 16px; border-bottom: 1px solid var(--rule); font-size: 0.88rem; }
+.stack-table tr:last-child td { border-bottom: none; }
+.stack-table tr:hover td { background: var(--surface); }
+.tech-name { font-weight: 600; }
+.tech-role { color: var(--muted); }
+.tech-cost { font-family: var(--mono); font-size: 0.8rem; font-weight: 600; color: var(--green); }
+.tech-note { font-size: 0.78rem; color: var(--muted); }
+.lic { font-family: var(--mono); font-size: 0.68rem; background: #ede9fe; color: var(--indigo); padding: 2px 7px; border-radius: 4px; }
+
+/* ── ROADMAP ────────────────────────────────────────── */
+.roadmap-list { display: flex; flex-direction: column; gap: 0; }
+.roadmap-item { display: flex; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--rule); }
+.roadmap-item:last-child { border-bottom: none; }
+.roadmap-ver {
+  font-family: var(--mono); font-size: 0.8rem; font-weight: 600;
+  color: var(--muted); flex-shrink: 0; width: 48px; padding-top: 2px;
+}
+.roadmap-body { flex: 1; }
+.roadmap-title { font-weight: 700; margin-bottom: 4px; }
+.roadmap-desc { font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; }
+.roadmap-features { display: flex; flex-wrap: wrap; gap: 6px; }
+.rf {
+  font-size: 0.75rem; padding: 2px 10px; border-radius: 99px;
+  border: 1px solid var(--rule); color: var(--muted); background: var(--surface);
+}
+.roadmap-status {
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+  padding: 3px 10px; border-radius: 99px; flex-shrink: 0; align-self: flex-start;
+}
+.s-done  { background: var(--green-bg); color: var(--green); border: 1px solid #b8e8d8; }
+.s-next  { background: var(--amber-bg); color: var(--amber); border: 1px solid #f0d4b0; }
+.s-plan  { background: var(--surface); color: var(--muted); border: 1px solid var(--rule); }
+
+/* ── DSGVO ──────────────────────────────────────────── */
+.dsgvo-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.dsgvo-item {
+  display: flex; gap: 12px; padding: 16px;
+  border-radius: 12px; border: 1px solid var(--rule); background: var(--surface);
+}
+.dsgvo-icon { font-size: 1.2rem; flex-shrink: 0; }
+.dsgvo-title { font-weight: 600; font-size: 0.88rem; margin-bottom: 2px; }
+.dsgvo-desc  { font-size: 0.78rem; color: var(--muted); }
+
+/* ── KOSTEN ─────────────────────────────────────────── */
+.kosten-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.kosten-card {
+  padding: 20px; border-radius: 14px; border: 1px solid var(--rule);
+  background: var(--surface); text-align: center;
+}
+.kosten-icon  { font-size: 1.4rem; margin-bottom: 8px; }
+.kosten-value { font-family: var(--display); font-size: 1.6rem; font-weight: 900; color: var(--green); }
+.kosten-label { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+.kosten-note  { font-size: 0.72rem; color: var(--muted); margin-top: 8px; font-family: var(--mono); }
+
+/* ── ZIELGRUPPE ─────────────────────────────────────── */
+.persona-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.persona-card {
+  padding: 24px; border-radius: 14px; border: 1px solid var(--rule); background: var(--surface);
+}
+.persona-emoji { font-size: 2.4rem; margin-bottom: 12px; }
+.persona-name  { font-weight: 700; margin-bottom: 4px; }
+.persona-role  { font-size: 0.78rem; color: var(--muted); margin-bottom: 14px; }
+.persona-quote {
+  font-family: var(--display); font-style: italic; font-size: 0.95rem;
+  color: var(--ink2); border-left: 3px solid var(--amber); padding-left: 14px;
+  line-height: 1.5;
+}
+.persona-needs { margin-top: 14px; display: flex; flex-direction: column; gap: 5px; }
+.persona-need  { font-size: 0.8rem; color: var(--muted); display: flex; gap: 6px; }
+.persona-need::before { content: '✓'; color: var(--green); }
+
+/* ── FOOTER ─────────────────────────────────────────── */
+footer {
+  background: var(--ink2); color: #9299b0;
+  padding: 48px 28px; margin-top: 0;
+}
+.footer-inner { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; }
+.footer-brand h3 { font-family: var(--display); color: #fff; font-size: 1.2rem; margin-bottom: 8px; }
+.footer-brand p { font-size: 0.82rem; line-height: 1.6; }
+.footer-col h4 { color: #c5cade; font-size: 0.78rem; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; }
+.footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.footer-col li { font-size: 0.82rem; }
+.footer-bottom {
+  max-width: 900px; margin: 32px auto 0;
+  padding-top: 24px; border-top: 1px solid #2e3348;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.75rem; font-family: var(--mono);
+}
+
+/* ── DIVIDER ─────────────────────────────────────────── */
+.divider { border: none; border-top: 1px solid var(--rule); margin: 0; }
+
+/* ── RESPONSIVE ─────────────────────────────────────── */
+@media (max-width: 720px) {
+  .hero-stats     { grid-template-columns: repeat(2, 1fr); }
+  .problem-grid   { grid-template-columns: 1fr; }
+  .features-grid  { grid-template-columns: 1fr 1fr; }
+  .flows-grid     { grid-template-columns: 1fr; }
+  .kosten-grid    { grid-template-columns: repeat(2, 1fr); }
+  .persona-grid   { grid-template-columns: 1fr; }
+  .dsgvo-grid     { grid-template-columns: 1fr; }
+  .footer-inner   { grid-template-columns: 1fr; }
+  .footer-bottom  { flex-direction: column; gap: 8px; text-align: center; }
+  .nav-links      { display: none; }
+}
+@media (max-width: 480px) {
+  .features-grid  { grid-template-columns: 1fr; }
+  .hero-stats     { grid-template-columns: repeat(2, 1fr); }
+  .kosten-grid    { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── NAV ─────────────────────────────────────────────── -->
+<nav>
+  <a href="/" class="nav-logo">🏠 FamilySpace &amp; KidsMedia</a>
+  <ul class="nav-links">
+    <li><a href="#problem">Problem</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#nutzer">Nutzer</a></li>
+    <li><a href="#technik">Technik</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+  </ul>
+  <span class="nav-badge">v1.2 · Live in Cloud Run</span>
+</nav>
+
+<!-- ── HERO ─────────────────────────────────────────────── -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-eyebrow">
+      <div class="hero-dot"></div>
+      <span class="eyebrow">Familien-App · Open Source · 100% kostenlos</span>
+    </div>
+
+    <h1 class="display hero-title">
+      Der Familienalltag<br>
+      <em>endlich strukturiert.</em>
+    </h1>
+
+    <p class="hero-desc">
+      FamilySpace &amp; KidsMedia ist eine datenschutzkonforme Plattform für Familien, Kitas und private Bildungsinstitutionen. Integriert Tagesplanung, Gamification-Punkte, Medien-Curation von sicheren APIs und lokales Offline-Caching.
+    </p>
+
+    <div class="hero-tags">
+      <span class="tag highlight">€0 / Monat</span>
+      <span class="tag">DSGVO-konform</span>
+      <span class="tag">Kein App Store nötig</span>
+      <span class="tag">Offline-fähig</span>
+      <span class="tag">API Curation (OpenLibrary &amp; GitHub)</span>
+      <span class="tag">PostgreSQL / Cloud SQL Active</span>
+    </div>
+
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-value display">€0</div>
+        <div class="stat-label">monatliche Kosten</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value display">5 APIs</div>
+        <div class="stat-label">freie Datenquellen</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value display">5 GB</div>
+        <div class="stat-label">kostenloser Speicher</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value display">100%</div>
+        <div class="stat-label">Aesthetic &amp; Clean</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PROBLEM / LÖSUNG ──────────────────────────────── -->
+<section id="problem">
+  <div class="container">
+    <div class="sec-header">
+      <p class="eyebrow">Problem &amp; Lösung</p>
+      <h2>Warum FamilySpace &amp; KidsMedia?</h2>
+      <p>Bestehende Medien- und Organisations-Apps sind überladen, teuer und speichern Kinderaktivitäten im Ausland.</p>
+    </div>
+
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="card-icon">😩</div>
+        <div class="card-title problem-title">Das Problem heute</div>
+        <ul class="card-list">
+          <li>Tagesplan in WhatsApp oder Zetteln – geht schnell verloren</li>
+          <li>Abo-Zwang (€5–15/Monat) bei kommerziellen Familien-Plattformen</li>
+          <li>Unkontrollierte Werbebanner-Einblendung und verstecktes Tracking</li>
+          <li>Fehlende pädagogische Kuration – Kinder sehen ungefilterte Inhalte</li>
+          <li>Kein sicheres Offline-Archiv für den Urlaub oder instabiles Netz</li>
+          <li>Komplizierter Kiosk-Modus ohne Sperrmechanismus</li>
+        </ul>
+      </div>
+      <div class="solution-card">
+        <div class="card-icon">✨</div>
+        <div class="card-title solution-title">Unsere integrierte Lösung</div>
+        <ul class="card-list">
+          <li>Zentraler digitaler Schulkinder- und Familientagesplan</li>
+          <li>100% werbefrei und unbeschränkt im Google Spark-Plan für €0</li>
+          <li>Sichere Pädagogik-Kuration (Wikipedia, OpenLibrary, LibriVox, GitHub)</li>
+          <li>Kindgerechtes Offline-Archiv mit lokaler Cloud SQL Speicherung</li>
+          <li>PIN-geschützter Elternbereich &amp; Echtzeit AI-Assistent</li>
+          <li>Eine SPA-Anwendung – kein App Store Zwang, auf jedem OS lauffähig</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ─────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <div class="sec-header">
+      <p class="eyebrow">Funktionsumfang</p>
+      <h2>Was KidsMedia &amp; FamilySpace im Kern kann</h2>
+      <p>Alle Kernfunktionen für den Familienalltag – im Adminbereich verwalten, im Archiv erleben.</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">👨‍👩‍👧</div>
+        <div class="feature-title">Kinder-Profile</div>
+        <div class="feature-desc">Eigenes Profil pro Kind mit Name, Emoji-Avatar, Profilfarbe und PIN zum Verlassen des Kinderbereichs.</div>
+        <span class="feature-badge fb-green">Unbegrenzt</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📅</div>
+        <div class="feature-title">Tagesplan</div>
+        <div class="feature-desc">Zeitblöcke mit Emoji, Titel, Von-Bis-Zeiten und Beschreibung. Kinder können Einträge als erledigt abhaken.</div>
+        <span class="feature-badge fb-indigo">Pro Tag &amp; Kind</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">⭐</div>
+        <div class="feature-title">Aufgaben &amp; Punkte</div>
+        <div class="feature-desc">Aufgaben mit Emoji und Punktwerten. Kinder sammeln Punkte durch Erledigen – einfache Gamification.</div>
+        <span class="feature-badge fb-amber">Motivierend</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🖼️</div>
+        <div class="feature-title">Medien-Galerie &amp; Archiv</div>
+        <div class="feature-desc">Download von Wissenskarten, Wikipedia-Einträgen, OpenLibrary-Büchern, Hörbüchern und Code-READMEs in das lokale Cloud SQL Archiv.</div>
+        <span class="feature-badge fb-green">Zentralisiert</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <div class="feature-title">Live-API Importeur</div>
+        <div class="feature-desc">Fünf integrierte öffentliche APIs: Wikipedia (DE), Wikimedia Commons, Open Library (Metadata), LibriVox (Hörspiele) und GitHub Repositories.</div>
+        <span class="feature-badge fb-indigo">Echtzeit HTTP</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🧒</div>
+        <div class="feature-title">Kindgerechter Bereich</div>
+        <div class="feature-desc">Großformatige UI mit Emojis, hellen/warmen Akzenten, Fortschrittsbalken und interdisziplinärem Quiz-Modul. Offlinelesbar.</div>
+        <span class="feature-badge fb-amber">Altersgerecht</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── NUTZERFLÜSSE ────────────────────────────────────── -->
+<section id="nutzer">
+  <div class="container">
+    <div class="sec-header">
+      <p class="eyebrow">Abläufe</p>
+      <h2>Benutzer-Interaktionen &amp; Workflows</h2>
+      <p>Entwickelt für reibungslose Übergaben und glückliche Erziehungsberechtigte und Kinder.</p>
+    </div>
+
+    <div class="flows-grid">
+      <div class="flow-card">
+        <div class="flow-header">
+          <div class="flow-avatar flow-eltern">👨‍💻</div>
+          <div>
+            <h3 class="flow-title">Kurator- und Eltern-Flow</h3>
+            <p class="flow-sub">Inhalte pflegen, organisieren und absichern</p>
+          </div>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="step-num">1</div>
+            <div class="step-text"><strong>Authentisierung:</strong> Sicherer Login über E-Mail oder Google OpenID OAuth.</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">2</div>
+            <div class="step-text"><strong>API-Kuration:</strong> Suchen und Filtern von Lehrbüchern aus OpenLibrary oder Entwickler-Repositories von GitHub.</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">3</div>
+            <div class="step-text"><strong>Offline-Spiegelung:</strong> Mit einem Klick das Dokument / README / PDF in die lokale Datenbank wegsichern.</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">4</div>
+            <div class="step-text"><strong>Plan-Setup:</strong> Tagespläne &amp; Quizfragen konfigurieren, um Kinder gezielt herauszufordern.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-card">
+        <div class="flow-header">
+          <div class="flow-avatar flow-kind">🧒</div>
+          <div>
+            <h3 class="flow-title">Kinder- und Schüler-Flow</h3>
+            <p class="flow-sub">Spannungsfreie Navigation &amp; Edutainment</p>
+          </div>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="step-num">1</div>
+            <div class="step-text"><strong>Profilauswahl:</strong> Auf das eigene bunte Profilbild klicken, Musik/Hörbuch starten.</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">2</div>
+            <div class="step-text"><strong>Tagesplan abgleichen:</strong> Sehen, welche Aufgaben anstehen (z.B. Zähneputzen 🦷, Hausaufgaben 📚).</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">3</div>
+            <div class="step-text"><strong>Abhaken &amp; Sammeln:</strong> Punkte einheimsen und das Tagesziel erreichen.</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">4</div>
+            <div class="step-text"><strong>Wissens-Quiz:</strong> Spielerische Fragen zu Natur, Raumfahrt oder Programmierung direkt offline beantworten.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── TECHNIK ─────────────────────────────────────────── -->
+<section id="technik">
+  <div class="container-wide">
+    <div class="sec-header">
+      <p class="eyebrow">Architektur</p>
+      <h2>Unser moderner Open Source Tech Stack</h2>
+      <p>Gebaut mit performanten, skalierbaren Cloud-Technologien und einem relationalem PostgreSQL-Kern.</p>
+    </div>
+
+    <table class="stack-table">
+      <thead>
+        <tr>
+          <th>Technologie / Dienst</th>
+          <th>Rolle im System</th>
+          <th>Betriebskosten</th>
+          <th>Lizenz / Datenschutz</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="tech-name">React SPA (Vite)</td>
+          <td class="tech-role">Hochperformantes Client-Interface mit flüssigen Animationen (Motion)</td>
+          <td class="tech-cost">€0</td>
+          <td><span class="lic">MIT</span> · Client-seitig im Browser</td>
+        </tr>
+        <tr>
+          <td class="tech-name">Express.js (Node.js)</td>
+          <td class="tech-role">Server-API-Proxy, um sensible Schlüssel zu verbergen (z.B. GITHUB_API_KEY)</td>
+          <td class="tech-cost">€0</td>
+          <td><span class="lic">MIT</span> · Server im Container</td>
+        </tr>
+        <tr>
+          <td class="tech-name">Google Cloud SQL</td>
+          <td class="tech-role">PostgreSQL-Datenbank für dauerhafte, relational verknüpfte Logs, Termine &amp; Medien</td>
+          <td class="tech-cost">Free-tier / Serverless</td>
+          <td><span class="lic">DSGVO</span> · Gehostet in Frankfurt, Deutschland</td>
+        </tr>
+        <tr>
+          <td class="tech-name">Firebase Auth &amp; DB</td>
+          <td class="tech-role">Echtzeit-Synchronisation &amp; Multi-User Client-Datenabgleich (Spark Plan)</td>
+          <td class="tech-cost">€0</td>
+          <td><span class="lic">SOC-3</span> · Europäische Server-Regionen</td>
+        </tr>
+        <tr>
+          <td class="tech-name">Gemini Pro API (Google GenAI)</td>
+          <td class="tech-role">Integrierter Chat-Assistent zur altersgerechten Vereinfachung von Texten</td>
+          <td class="tech-cost">Free-tier</td>
+          <td><span class="lic">Google AI</span> · Daten werden nicht für Modelle missbraucht</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── ROADMAP ────────────────────────────────────────── -->
+<section id="roadmap">
+  <div class="container">
+    <div class="sec-header">
+      <p class="eyebrow">Roadmap</p>
+      <h2>Entwicklungsstufen</h2>
+      <p>Unser iterativer Veröffentlichungsplan für einen noch besseren Gruppen- und Familienalltag.</p>
+    </div>
+
+    <div class="roadmap-list">
+      <div class="roadmap-item">
+        <div class="roadmap-ver">v1.0</div>
+        <div class="roadmap-body">
+          <div class="roadmap-title">Fundament &amp; Offline-Archiv</div>
+          <p class="roadmap-desc">Vollwertige PostgreSQL Integration für Logs und lokale Bibliothek. Curation über Wikimedia und Open Library.</p>
+          <div class="roadmap-features">
+            <span class="rf">PostgreSQL</span>
+            <span class="rf">Vite React Dev Server</span>
+            <span class="rf">Local Library</span>
+          </div>
+        </div>
+        <span class="roadmap-status s-done">✓ Fertiggestellt</span>
+      </div>
+
+      <div class="roadmap-item">
+        <div class="roadmap-ver">v1.2</div>
+        <div class="roadmap-body">
+          <div class="roadmap-title">Entwickler- &amp; GitHub Anbindung</div>
+          <p class="roadmap-desc">Unterstützung von GitHub Repository GitHub APIs, direktem Import von Readme-Dateien &amp; Code-Referenzen.</p>
+          <div class="roadmap-features">
+            <span class="rf">GitHub Proxy API</span>
+            <span class="rf">Token Auth</span>
+            <span class="rf">Readmes as Articles</span>
+          </div>
+        </div>
+        <span class="roadmap-status s-done">✓ Fertiggestellt</span>
+      </div>
+
+      <div class="roadmap-item">
+        <div class="roadmap-ver">v1.5</div>
+        <div class="roadmap-body">
+          <div class="roadmap-title">GraphQL Extension &amp; WebSockets</div>
+          <p class="roadmap-desc">Unterstützung des OpenLibrary GraphQL Frameworks (<a class="text-indigo-600 hover:underline" href="https://github.com/DiFronzo/OpenLibrary-GraphQL" target="_blank" rel="noreferrer">OpenLibrary-GraphQL</a>) für granulare Buchabfragen und Live-Synchronisation.</p>
+          <div class="roadmap-features">
+            <span class="rf">GraphQL Interface</span>
+            <span class="rf">Apollo Client</span>
+            <span class="rf">Real-Time Canvas</span>
+          </div>
+        </div>
+        <span class="roadmap-status s-next">💡 In Planung</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── DSGVO ──────────────────────────────────────────── -->
+<section id="dsgvo">
+  <div class="container">
+    <div class="sec-header">
+      <p class="eyebrow">Datenschutz</p>
+      <h2>100% DSGVO-konforme Architektur</h2>
+      <p>Ihre Privatsphäre und die Daten Ihrer Kinder sind unantastbar. Wir arbeiten ohne externe Tracking-Pixel.</p>
+    </div>
+
+    <div class="dsgvo-grid">
+      <div class="dsgvo-item">
+        <div class="dsgvo-icon">🇩🇪</div>
+        <div>
+          <h4 class="dsgvo-title">Server in Deutschland</h4>
+          <p class="dsgvo-desc">Unsere Cloud SQL Instanz und alle Firebase Spark Datenbankknoten liegen dauerhaft im physischen Rechenzentrum in Frankfurt am Main.</p>
+        </div>
+      </div>
+      <div class="dsgvo-item">
+        <div class="dsgvo-icon">🕶️</div>
+        <div>
+          <h4 class="dsgvo-title">Keine Datenanalyse</h4>
+          <p class="dsgvo-desc">Wir binden keine Werbenetzwerke, Google Analytics, Facebook SDKs oder sonstige Marketing-Tracker ein. Kinder surfen absolut ungestört.</p>
+        </div>
+      </div>
+      <div class="dsgvo-item">
+        <div class="dsgvo-icon">🔒</div>
+        <div>
+          <h4 class="dsgvo-title">Lokale Verschlüsselung</h4>
+          <p class="dsgvo-desc">Passwörter werden über Argon2/Firebase PBKDF2 gehast. Verbindungen sind permanent SSL/TLS verschlüsselt.</p>
+        </div>
+      </div>
+      <div class="dsgvo-item">
+        <div class="dsgvo-icon">📝</div>
+        <div>
+          <h4 class="dsgvo-title font-bold">Auskunftsrecht &amp; Löschung</h4>
+          <p class="dsgvo-desc">Administratoren können im Audit-Monitor sämtliche Logs im Klartext sichten und verwalten. Datenlöschungen werden sofort ausgeführt.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── KOSTEN & INVESTMENT ──────────────────────────────── -->
+<section id="kosten">
+  <div class="container">
+    <div class="sec-header">
+      <p class="eyebrow">Kalkulation</p>
+      <h2>Keine bösen Überraschungen oder Abonnements</h2>
+      <p>Wir nutzen die großzügigen kostenlosen Kontingente der führenden Cloud-Provider aus.</p>
+    </div>
+
+    <div class="kosten-grid">
+      <div class="kosten-card">
+        <div class="kosten-icon">👤</div>
+        <div class="kosten-value">€0 / Mon.</div>
+        <div class="kosten-label font-bold">Firebase Auth</div>
+        <div class="kosten-note">Bis zu 50.000 aktive Nutzer</div>
+      </div>
+      <div class="kosten-card">
+        <div class="kosten-icon">💾</div>
+        <div class="kosten-value">€0 / Mon.</div>
+        <div class="kosten-label font-bold">Cloud-Datenbank</div>
+        <div class="kosten-note">Spark free tier / PostgreSQL</div>
+      </div>
+      <div class="kosten-card">
+        <div class="kosten-icon">🎨</div>
+        <div class="kosten-value">€0 / Mon.</div>
+        <div class="kosten-label font-bold">Serverless Hosting</div>
+        <div class="kosten-note">Cloud Run free tier limits</div>
+      </div>
+      <div class="kosten-card">
+        <div class="kosten-icon">🛠️</div>
+        <div class="kosten-value">€0 / Mon.</div>
+        <div class="kosten-label font-bold">Open Source Lizenz</div>
+        <div class="kosten-note">Community-gesteuerte Software</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ZIELGRUPPE & PERSONAS ─────────────────────────────── -->
+<section id="nutzer-gruppen">
+  <div class="container">
+    <div class="sec-header">
+      <p class="eyebrow">Persona Profile</p>
+      <h2>Für wen haben wir KidsMedia &amp; FamilySpace gebaut?</h2>
+      <p>Drei typische Profile, die von unserer integrierten All-In-One Medienplattform profitieren.</p>
+    </div>
+
+    <div class="persona-grid">
+      <div class="persona-card">
+        <div class="persona-emoji">💡</div>
+        <h3 class="persona-name">Elena (34)</h3>
+        <p class="persona-role text-xs">Berufstätige Mutter von zwei Kindern</p>
+        <p class="persona-quote">"Ich wollte eine gemeinsame, sichere Platform, bei der ich Content vorauswählen kann und meine Kinder spielerisch ihre Pflichten abhaken."</p>
+        <div class="persona-needs">
+          <span class="persona-need text-xs">Punkte-Scoreboards</span>
+          <span class="persona-need text-xs">Tagesablauf im Kiosk</span>
+        </div>
+      </div>
+
+      <div class="persona-card">
+        <div class="persona-emoji">🎓</div>
+        <h3 class="persona-name">Markus (42)</h3>
+        <p class="persona-role text-xs">Grundschullehrer &amp; IT-Kustos</p>
+        <p class="persona-quote">"Für uns im Unterricht ist die werbefreie Einbindung von Wikipedia und OpenLibrary ein Segen. Keine ablenkende Social-Media Widgets!"</p>
+        <div class="persona-needs">
+          <span class="persona-need text-xs">Offline-Sicherheit</span>
+          <span class="persona-need text-xs">Gemeinfreie Hörbücher</span>
+        </div>
+      </div>
+
+      <div class="persona-card">
+        <div class="persona-emoji">💻</div>
+        <h3 class="persona-name">Sven (28)</h3>
+        <p class="persona-role text-xs">Software Engineer &amp; Hobby-Admin</p>
+        <p class="persona-quote">"Die einfache Kuration mit automatischem GitHub-Readme Caching macht dieses Tool zur perfekten Dokumentationsdatenbank für mein Homelab."</p>
+        <div class="persona-needs">
+          <span class="persona-need text-xs">GitHub-Proxy</span>
+          <span class="persona-need text-xs">Cloud SQL Postgres Audit Logs</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <h3>🏠 FamilySpace &amp; KidsMedia</h3>
+      <p>Die moderne, datenschutzkonforme Offline-Zentrale und Kurationsplattform für Familien und fortschrittliche Bildungseinrichtungen.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Informationen</h4>
+      <ul>
+        <li><a href="#problem" style="color: #9299b0; text-decoration: none;">Über das Projekt</a></li>
+        <li><a href="#technik" style="color: #9299b0; text-decoration: none;">Technologien</a></li>
+        <li><a href="https://github.com/DiFronzo/OpenLibrary-GraphQL" target="_blank" rel="noreferrer" style="color: #9299b0; text-decoration: none;">GitHub OpenLibrary-GraphQL</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Datenschutz</h4>
+      <ul>
+        <li><a href="#dsgvo" style="color: #9299b0; text-decoration: none;">DSGVO Richtlinien</a></li>
+        <li><a href="#kosten" style="color: #9299b0; text-decoration: none;">Kostenkalkulation</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 FamilySpace &amp; KidsMedia Projekt. Alle Rechte vorbehalten. 100% Freie Software.</span>
+    <span>Projekt v1.2 • Frankfurt, Germany</span>
+  </div>
+</footer>
+
+</body>
+</html>

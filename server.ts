@@ -253,16 +253,11 @@ async function start() {
         });
       }
 
-      // 3. Generiere System Prompt basierend auf Modus, Diagnose/Altersgruppe und Phase/Fachkategorie
-      const customSystemInstruction = mode === "clinical"
-        ? getClinicalDeescalationSystemPrompt(
-            diagnosis || "ADHS",
-            phase || "Phase I: Prä-Krise"
-          )
-        : getEduSystemPrompt(
-            diagnosis || "Alter 8-11 Jahre",
-            phase || "Keine Kategorie"
-          );
+      // 3. Generiere System Prompt basierend auf Altersgruppe und Fachkategorie
+      const customSystemInstruction = getEduSystemPrompt(
+          diagnosis || "Alter 8-11 Jahre",
+          phase || "Keine Kategorie"
+        );
 
       // Check API Key
       if (!process.env.GEMINI_API_KEY) {
@@ -465,6 +460,47 @@ async function start() {
     } catch (error: any) {
       console.error("Error in LibriVox proxy:", error);
       res.status(500).json({ error: error.message || "Fehler beim Abruf der LibriVox Hörbücher." });
+    }
+  });
+
+  // 4.5. MUSICBRAINZ API
+  app.get("/api/education-api/musicbrainz", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { uid } = req.user!;
+      const query = (req.query.q as string) || "Kinderlieder";
+
+      const dbUser = await getUserByUid(uid);
+      const userId = dbUser ? dbUser.id : null;
+
+      await createApiLog(userId, "MusicBrainz Catalog", `/api/education-api/musicbrainz?q=${query}`, 200);
+
+      const url = `https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json`;
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "KidsMediaHub/1.2 ( kohl@web.de )"
+        }
+      });
+      if (!response.ok) throw new Error(`MusicBrainz failed with status ${response.status}`);
+      const data = await response.json();
+
+      const results = (data.releases || []).map((r: any) => {
+        const artist = r["artist-credit"] ? r["artist-credit"].map((a: any) => a.name).join(", ") : "Unbekannt";
+        const trackCount = r.media ? r.media.reduce((acc: number, m: any) => acc + (m["track-count"] || 0), 0) : 0;
+        return {
+          id: r.id,
+          title: r.title,
+          artist,
+          date: r.date || "Unbekannt",
+          country: r.country || "Unbekannt",
+          trackCount,
+          coverUrl: `https://coverartarchive.org/release/${r.id}/front`
+        };
+      });
+
+      res.json(results);
+    } catch (error: any) {
+      console.error("Error in MusicBrainz proxy:", error);
+      res.status(500).json({ error: error.message || "Fehler beim Abruf der MusicBrainz Daten." });
     }
   });
 
@@ -922,6 +958,11 @@ Produce a highly creative response following the requested schema. Ensure the co
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to generate sync manifest." });
     }
+  });
+
+  // API Route: About/Product Description Page (Self-Documenting Page)
+  app.get("/about", (req, res) => {
+    res.sendFile(path.join(process.cwd(), "about.html"));
   });
 
   // Setup Vite Dev Server / Static Assets
