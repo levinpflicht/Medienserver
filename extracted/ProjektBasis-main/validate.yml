@@ -1,0 +1,57 @@
+name: Validate HTML
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    name: HTML Validation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check app.html exists
+        run: |
+          if [ ! -f "src/app.html" ]; then
+            echo "❌ src/app.html nicht gefunden!"
+            exit 1
+          fi
+          echo "✅ src/app.html gefunden"
+
+      - name: Check file size
+        run: |
+          SIZE=$(wc -c < src/app.html)
+          echo "📦 Dateigröße: $SIZE Bytes"
+          if [ $SIZE -lt 1000 ]; then
+            echo "❌ Datei zu klein – wahrscheinlich leer"
+            exit 1
+          fi
+          echo "✅ Dateigröße ok"
+
+      - name: Check for placeholder config
+        run: |
+          if grep -q "DEIN_API_KEY" src/app.html; then
+            echo "⚠️ Warnung: Platzhalter-Config noch vorhanden"
+            echo "   Bitte echte Firebase-Config eintragen"
+          else
+            echo "✅ Firebase-Config eingetragen"
+          fi
+
+      - name: Check DEMO_MODE
+        run: |
+          if grep -q "DEMO_MODE = true" src/app.html; then
+            echo "ℹ️ Demo-Modus ist aktiv"
+          else
+            echo "✅ Firebase-Modus aktiv"
+          fi
+
+      - name: Summary
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  FamilySpace Build-Check ✅"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

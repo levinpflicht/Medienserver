@@ -32,7 +32,10 @@ import {
   Info,
   Unlock,
   ArrowLeft,
-  Award
+  Award,
+  Calendar,
+  Image,
+  Upload
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from "firebase/auth";
@@ -108,6 +111,22 @@ export default function App() {
       points: number;
       completed: boolean;
     }>;
+    schedule?: Array<{
+      id: string;
+      title: string;
+      emoji: string;
+      timeFrom: string;
+      timeTo: string;
+      description: string;
+      completed: boolean;
+    }>;
+    mediaGallery?: Array<{
+      id: string;
+      name: string;
+      url: string;
+      fileType: "bild" | "video";
+      createdAt: string;
+    }>;
   }
 
   const [currentPortal, setCurrentPortal] = useState<"parent" | "child_selector" | "child_dashboard">("parent");
@@ -115,7 +134,7 @@ export default function App() {
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   
   // Child Portal UI active components
-  const [childActiveTab, setChildActiveTab] = useState<"tasks" | "library" | "music" | "quiz" | "chat">("tasks");
+  const [childActiveTab, setChildActiveTab] = useState<"tasks" | "library" | "music" | "quiz" | "chat" | "galerie">("tasks");
   const [pinEntryScreen, setPinEntryScreen] = useState<ChildProfile | null>(null);
   const [enteredPin, setEnteredPin] = useState("");
   const [pinErrorMsg, setPinErrorMsg] = useState("");
@@ -153,6 +172,17 @@ export default function App() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [inputText, setInputText] = useState("");
   const [newSessionName, setNewSessionName] = useState("");
+
+  // Family Album Gallery interactive states
+  const [galleryFilter, setGalleryFilter] = useState<"all" | "bild" | "video">("all");
+  const [selectedLightboxMedia, setSelectedLightboxMedia] = useState<any | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Parent Admin - Child Schedule builder states
+  const [newScheduleTime, setNewScheduleTime] = useState("08:00");
+  const [newScheduleTitle, setNewScheduleTitle] = useState("");
+  const [newScheduleEmoji, setNewScheduleEmoji] = useState("☀️");
 
   // VOLKSBILDUNG & INTERAKTIVER ANREICHERUNGS- IMPORT (5 FREIE APIs)
   const [apiType, setApiType] = useState<"wikipedia" | "wikimedia" | "openlibrary" | "librivox" | "opentrivia" | "musicbrainz">("wikipedia");
@@ -265,9 +295,14 @@ export default function App() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setChildren(parsed);
-          if (parsed.length > 0) {
-            setSelectedChildToEditId(parsed[0].id);
+          const sanitized = parsed.map((c: any) => ({
+            ...c,
+            schedule: c.schedule || [],
+            mediaGallery: c.mediaGallery || []
+          }));
+          setChildren(sanitized);
+          if (sanitized.length > 0) {
+            setSelectedChildToEditId(sanitized[0].id);
           }
         } catch (e) {
           console.error("Error parsing saved child metadata:", e);
@@ -289,6 +324,14 @@ export default function App() {
               { id: "t1", title: "Zähneputzen 🦷", emoji: "🦷", points: 10, completed: false },
               { id: "t2", title: "Zimmer aufräumen 🧸", emoji: "🧸", points: 20, completed: true },
               { id: "t3", title: "Gemüse aufessen 🥕", emoji: "🥕", points: 10, completed: false }
+            ],
+            schedule: [
+              { id: "s1", title: "Frühstück mit Kakao 🥣", emoji: "🥣", timeFrom: "08:30", timeTo: "09:00", description: "Leckeres Müsli essen und gestärkt in den Tag starten.", completed: true },
+              { id: "s2", title: "Mediathek Entdeckungszeit 📚", emoji: "📚", timeFrom: "09:45", timeTo: "10:45", description: "Spannende Kinderbücher lesen oder Hörbücher in der Offline-Mediathek anhören.", completed: false },
+              { id: "s3", title: "Spielerunde im Freien ☀️", emoji: "☀️", timeFrom: "15:00", timeTo: "16:30", description: "Draußen mit Freunden spielen, Klettern und frische Luft schnappen.", completed: false }
+            ],
+            mediaGallery: [
+              { id: "m1", name: "Waldabenteuer mit Lukas.jpg", url: "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=600&q=80", fileType: "bild", createdAt: new Date().toISOString() }
             ]
           },
           {
@@ -306,6 +349,14 @@ export default function App() {
               { id: "t10", title: "Hausaufgaben erledigen 📚", emoji: "📚", points: 30, completed: false },
               { id: "t11", title: "Katze füttern 🐱", emoji: "🐱", points: 15, completed: false },
               { id: "t12", title: "Fahrradhelm aufräumen 🪖", emoji: "🪖", points: 10, completed: true }
+            ],
+            schedule: [
+              { id: "s10", title: "Minka füttern & Frühstück 🐈", emoji: "🐈", timeFrom: "08:00", timeTo: "08:45", description: "Katze füttern und im Anschluss ein leckeres Frühstück genießen.", completed: true },
+              { id: "s11", title: "Aufgaben für die Schule ✏️", emoji: "✏️", timeFrom: "13:45", timeTo: "15:15", description: "Hausaufgaben hochkonzentriert am Schreibtisch lösen.", completed: false },
+              { id: "s12", title: "Großes Quiz Duell 🧠", emoji: "🧠", timeFrom: "17:00", timeTo: "17:45", description: "Unsere Wissensfragen beantworten und neue Höchstwerte aufstellen.", completed: false }
+            ],
+            mediaGallery: [
+              { id: "m10", name: "Geburtstag_Mia.jpg", url: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?auto=format&fit=crop&w=600&q=80", fileType: "bild", createdAt: new Date().toISOString() }
             ]
           }
         ];
@@ -1167,6 +1218,16 @@ export default function App() {
                 🦊 Mein KI-Lernbuddy
               </button>
             )}
+
+            {/* FAMILIEN ALBUM */}
+            <button
+              onClick={() => setChildActiveTab("galerie")}
+              className={`px-4 py-2 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                childActiveTab === "galerie" ? "bg-indigo-650 border border-indigo-505 text-white shadow" : "text-slate-450 hover:text-slate-201"
+              }`}
+            >
+              🖼️ Familien-Album
+            </button>
           </div>
         </div>
 
@@ -1174,7 +1235,7 @@ export default function App() {
         <main className="flex-grow max-w-4xl w-full mx-auto p-6">
           <AnimatePresence mode="wait">
             
-            {/* TAB: TASKS WORKSPACE */}
+            {/* TAB: TASKS & SCHEDULING WORKSPACE */}
             {childActiveTab === "tasks" && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
@@ -1182,20 +1243,110 @@ export default function App() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-6"
               >
+                {/* UPGRADED SUB-TAB: MEIN TAGESABLAUF (ROUTINES & TIMELINE) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+                  <div className="border-b border-slate-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-lg font-black text-white flex items-center gap-2">
+                        <span>⏰</span> Mein Tagesablauf &amp; Routinen
+                      </h2>
+                      <p className="text-xs text-slate-400">Halte dich an deinen zeitlichen Tagesplan für heute!</p>
+                    </div>
+                    <span className="text-[10px] bg-indigo-950/80 font-mono px-2.5 py-1 rounded-xl border border-indigo-800/60 text-indigo-300 font-bold tracking-wide self-start sm:self-center">
+                      HEUTE AKTUELL
+                    </span>
+                  </div>
+
+                  {(!activeChild.schedule || activeChild.schedule.length === 0) ? (
+                    <div className="text-center p-8 bg-slate-950 border border-dashed border-slate-850 rounded-2xl text-slate-500 italic text-xs">
+                      Aktuell keine festen Zeitblöcke oder Routinen eingetragen. Trage im Eltern-Portal deine Tagesabläufe ein! 🏖️
+                    </div>
+                  ) : (
+                    <div className="relative border-l-2 border-slate-800 ml-4 pl-6 space-y-6 pt-2 pb-2">
+                      {activeChild.schedule.map((slot) => (
+                        <div key={slot.id} className="relative group">
+                          {/* Timeline dot decoration */}
+                          <div className={`absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 transition duration-300 ${
+                            slot.completed 
+                              ? "bg-indigo-500 border-indigo-400 ring-4 ring-indigo-950" 
+                              : "bg-slate-900 border-slate-750 group-hover:border-indigo-400"
+                          }`} />
+
+                          <div className={`p-4 rounded-2xl border transition duration-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                            slot.completed
+                              ? "bg-slate-955/40 border-slate-900/80 opacity-70"
+                              : "bg-slate-900/60 border-slate-850 hover:border-slate-800"
+                          }`}>
+                            <div className="flex items-start gap-3.5">
+                              <span className="text-3xl p-2 bg-slate-950 border border-slate-850 rounded-xl select-none inline-block shadow-inner">{slot.emoji || "📌"}</span>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-black text-indigo-400 font-sans flex items-center gap-1 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-900/50">
+                                    <Clock className="w-3 h-3 text-indigo-400" />
+                                    {slot.timeFrom} - {slot.timeTo}
+                                  </span>
+                                  {slot.completed && (
+                                    <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-900/60">
+                                      ✓ Absolviert
+                                    </span>
+                                  )}
+                                </div>
+                                <h3 className={`font-black text-sm mt-1.5 ${slot.completed ? "line-through text-slate-500" : "text-white"}`}>
+                                  {slot.title}
+                                </h3>
+                                {slot.description && (
+                                  <p className="text-xs text-slate-450 mt-1 leading-relaxed">{slot.description}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                const newSchedule = (activeChild.schedule || []).map(s => {
+                                  if (s.id === slot.id) return { ...s, completed: !s.completed };
+                                  return s;
+                                });
+                                const updatedChildren = children.map(c => {
+                                  if (c.id === activeChild.id) {
+                                    return { ...c, schedule: newSchedule };
+                                  }
+                                  return c;
+                                });
+                                updateAndSaveChildren(updatedChildren);
+                                addUiLog(`${activeChild.name} hat Routine-Status geändert: ${slot.title}`, "info");
+                              }}
+                              className={`p-1.5 px-3 rounded-xl font-bold text-[10px] transition shrink-0 uppercase tracking-wider ${
+                                slot.completed
+                                  ? "bg-slate-955 text-indigo-400 border border-slate-800 hover:bg-slate-900 text-slate-450"
+                                  : "bg-indigo-950/40 border border-indigo-900/50 hover:bg-indigo-900/30 text-indigo-300 hover:text-white"
+                              }`}
+                            >
+                              {slot.completed ? "Wiederholen ↩️" : "Erledigt! 👍"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* EXISTING TASKS / CHORES LIST */}
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
                   <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
                     <div>
-                      <h2 className="text-lg font-bold text-white">Mein Tagesplan 📅</h2>
+                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span>⭐</span> Meine Aufgaben &amp; Hausarbeiten
+                      </h2>
                       <p className="text-xs text-slate-400">Erledige die täglichen Aufgaben und sammle goldene Sterne!</p>
                     </div>
-                    <span className="text-[10px] bg-indigo-950 font-mono px-2 py-0.5 rounded border border-indigo-900 text-indigo-300">
-                      TÄGLICH AKTUALISIERT
+                    <span className="text-[10px] bg-indigo-950 font-mono px-2 py-0.5 rounded border border-indigo-900 text-indigo-300 font-bold">
+                      STERNE SAMMELN
                     </span>
                   </div>
 
                   {(!activeChild.tasks || activeChild.tasks.length === 0) ? (
-                    <div className="text-center p-8 bg-slate-950 border border-dashed border-slate-850 rounded-2xl text-slate-550 italic text-xs">
-                      Aktuell keine Aufgaben eingetragen. Entspanne dich und hab einen wundervollen Tag! ☀️
+                    <div className="text-center p-8 bg-slate-955 border border-dashed border-slate-850 rounded-2xl text-slate-550 italic text-xs">
+                      Aktuell keine Pflichtaufgaben eingetragen. Entspanne dich und hab einen wundervollen Tag! ☀️
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1204,12 +1355,12 @@ export default function App() {
                           key={task.id}
                           className={`p-4 rounded-2xl border transition flex items-center justify-between gap-4 ${
                             task.completed
-                              ? "bg-slate-950/60 border-emerald-950/80 p-4 opacity-75"
+                              ? "bg-slate-955/60 border-emerald-950/40 p-4 opacity-75 animate-pulse-once"
                               : "bg-slate-900 border-slate-800 hover:border-indigo-950 hover:bg-slate-900/60"
                           }`}
                         >
                           <div className="flex items-center gap-3">
-                            <span className="text-3xl select-none">{task.emoji}</span>
+                            <span className="text-3xl select-none">{task.emoji || "✨"}</span>
                             <div>
                               <h3 className={`font-extrabold text-xs ${task.completed ? "line-through text-slate-500" : "text-white"}`}>
                                 {task.title}
@@ -1241,8 +1392,8 @@ export default function App() {
                             }}
                             className={`p-2 px-4.5 rounded-xl font-bold text-xs transition active:scale-95 flex items-center gap-1 shrink-0 ${
                               task.completed
-                                ? "bg-emerald-950/40 border border-emerald-900/60 text-emerald-400 cursor-not-allowed"
-                                : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-950/20"
+                                ? "bg-emerald-950/40 border border-emerald-950/65 text-emerald-400 cursor-not-allowed"
+                                : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md"
                             }`}
                           >
                             {task.completed ? "✓ Erledigt!" : "Erledigt! 🎉"}
@@ -1711,6 +1862,247 @@ export default function App() {
                   )}
                 </div>
               </motion.div>
+            )}
+
+            {/* TAB: FAMILY ALBUM PHOTO & VIDEO GALLERY */}
+            {childActiveTab === "galerie" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
+                  {/* Header */}
+                  <div className="border-b border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-black text-white flex items-center gap-2">
+                        <span>🖼️</span> Familien-Album &amp; Galerie
+                      </h2>
+                      <p className="text-xs text-slate-400">Erinnere dich an eure tollen Momente, teile Fotos und schau lustige Videos!</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Filter Buttons */}
+                      <button
+                        onClick={() => setGalleryFilter("all")}
+                        className={`px-3 py-1.5 rounded-xl border text-[10px] font-black transition ${
+                          galleryFilter === "all" ? "bg-indigo-600 border-indigo-500 text-white shadow" : "bg-slate-950 border-slate-850 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        Alles
+                      </button>
+                      <button
+                        onClick={() => setGalleryFilter("bild")}
+                        className={`px-3 py-1.5 rounded-xl border text-[10px] font-black transition ${
+                          galleryFilter === "bild" ? "bg-indigo-600 border-indigo-500 text-white shadow" : "bg-slate-950 border-slate-850 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        📸 Fotos
+                      </button>
+                      <button
+                        onClick={() => setGalleryFilter("video")}
+                        className={`px-3 py-1.5 rounded-xl border text-[10px] font-black transition ${
+                          galleryFilter === "video" ? "bg-indigo-600 border-indigo-500 text-white shadow" : "bg-slate-950 border-slate-850 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        🎥 Videos
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Upload Drop Zone / Button */}
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-slate-800 hover:border-indigo-600 rounded-2xl bg-slate-950/45 p-6 text-center cursor-pointer transition group"
+                  >
+                    <input 
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*,video/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setUploadProgress(true);
+                        addUiLog("Analysiere und lade Mediendatei ins Offline-Speichernetzwerk...", "info");
+
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const resultStr = reader.result as string;
+                          const isVideo = file.type.startsWith("video");
+                          const item = {
+                            id: "med-" + Date.now(),
+                            name: file.name,
+                            url: resultStr,
+                            fileType: (isVideo ? "video" : "bild") as "bild" | "video",
+                            createdAt: new Date().toISOString()
+                          };
+
+                          const curMedia = activeChild.mediaGallery || [];
+                          const updatedChildren = children.map(c => {
+                            if (c.id === activeChild.id) {
+                              return {
+                                ...c,
+                                mediaGallery: [item, ...curMedia]
+                              };
+                            }
+                            return c;
+                          });
+
+                          updateAndSaveChildren(updatedChildren);
+                          addUiLog(`Erfolgreich hochgeladen: ${file.name}`, "success");
+                          setUploadProgress(false);
+                        };
+                        reader.onerror = () => {
+                          addUiLog("Fehler beim Verarbeiten der lokalen Datei.", "warn");
+                          setUploadProgress(false);
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                    <div className="flex flex-col items-center gap-2">
+                      {uploadProgress ? (
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                      ) : (
+                        <Upload className="w-8 h-8 text-slate-500 group-hover:text-indigo-400 transition" />
+                      )}
+                      <div>
+                        <p className="text-xs font-bold text-slate-350">Klicke hier, um ein Foto oder Video hochzuladen 📸</p>
+                        <p className="text-[10px] text-slate-550 mt-1">Unterstützt Kamera-Aufnahmen, GIFs, JPEGs &amp; MP4s</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gallery Grid */}
+                  {(() => {
+                    const mediaList = activeChild.mediaGallery || [];
+                    const filtered = mediaList.filter(m => galleryFilter === "all" || m.fileType === galleryFilter);
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="text-center p-12 bg-slate-955 border border-dashed border-slate-850 rounded-2xl text-slate-500 italic text-xs">
+                          Keine Bilder oder Videos in dieser Kategorie gefunden. Lade dein erstes Familienmitglied-Foto hoch! 🥰
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {filtered.map((item) => (
+                          <div 
+                            key={item.id}
+                            className="bg-slate-950 border border-slate-850 hover:border-slate-800 rounded-2xl overflow-hidden shadow-md transition group flex flex-col justify-between"
+                          >
+                            <div 
+                              onClick={() => setSelectedLightboxMedia(item)}
+                              className="aspect-[4/3] bg-slate-900/40 flex items-center justify-center overflow-hidden cursor-pointer relative"
+                            >
+                              {item.fileType === "video" ? (
+                                <div className="w-full h-full relative">
+                                  {item.url.startsWith("data:video") ? (
+                                    <video src={item.url} className="w-full h-full object-cover" muted />
+                                  ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950/80">
+                                      <span className="text-4xl text-amber-500">🎥</span>
+                                      <span className="text-[9px] text-slate-400 mt-2 font-mono truncate px-4 max-w-full">{item.name}</span>
+                                    </div>
+                                  )}
+                                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-305">
+                                    <span className="bg-slate-900/80 px-3 py-1.5 rounded-full text-xs font-bold text-white border border-slate-700">▶ Abspielen</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <img 
+                                  src={item.url} 
+                                  className="w-full h-full object-cover group-hover:scale-105 transition duration-500" 
+                                  alt={item.name}
+                                  referrerPolicy="no-referrer"
+                                />
+                              )}
+                              <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[8px] font-black uppercase font-mono tracking-widest bg-slate-950/85 border border-slate-800 text-indigo-400 shadow">
+                                {item.fileType === "video" ? "🎥 VIDEO" : "📸 FOTO"}
+                              </span>
+                            </div>
+
+                            <div className="p-3 bg-slate-900/40 flex items-center justify-between border-t border-slate-900/60">
+                              <div className="min-w-0 flex-1 pr-2">
+                                <p className="text-[10px] font-bold text-slate-200 truncate" title={item.name}>{item.name}</p>
+                                <p className="text-[8px] text-slate-500 font-mono mt-0.5">Am {new Date(item.createdAt).toLocaleDateString()}</p>
+                              </div>
+
+                              <button
+                                onClick={() => {
+                                  const updatedMedia = mediaList.filter(m => m.id !== item.id);
+                                  const updatedChildren = children.map(c => {
+                                    if (c.id === activeChild.id) {
+                                      return {
+                                        ...c,
+                                        mediaGallery: updatedMedia
+                                      };
+                                    }
+                                    return c;
+                                  });
+                                  updateAndSaveChildren(updatedChildren);
+                                  addUiLog(`Mediendatei gelöscht: ${item.name}`, "info");
+                                }}
+                                className="p-1 px-2.5 rounded-lg text-[9px] font-bold bg-slate-950 hover:bg-rose-950 hover:text-rose-400 border border-slate-850 hover:border-rose-900 transition shrink-0 text-slate-400"
+                              >
+                                Entfernen
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </motion.div>
+            )}
+
+            {/* LIGHTBOX PREVIEW MODAL */}
+            {selectedLightboxMedia && (
+              <div 
+                className="fixed inset-0 bg-black/95 backdrop-blur-md z-[9999] flex flex-col items-center justify-center p-4"
+                onClick={() => setSelectedLightboxMedia(null)}
+              >
+                <div 
+                  className="max-w-4xl w-full bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button 
+                    onClick={() => setSelectedLightboxMedia(null)}
+                    className="absolute top-4 right-4 p-2 bg-slate-900/95 hover:bg-slate-850 text-slate-400 hover:text-white rounded-full border border-slate-800 transition z-50 shadow"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+
+                  <div className="p-4 bg-slate-900 border-b border-slate-850 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-extrabold text-white truncate max-w-sm sm:max-w-md">{selectedLightboxMedia.name}</h3>
+                      <p className="text-[10px] text-slate-400 font-mono mt-0.5">Familien-Album · Hochgeladen am {new Date(selectedLightboxMedia.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="aspect-[16/10] sm:aspect-[16/9] bg-slate-950 flex items-center justify-center overflow-hidden">
+                    {selectedLightboxMedia.fileType === "video" ? (
+                      <video 
+                        src={selectedLightboxMedia.url} 
+                        className="w-full h-full object-contain" 
+                        controls 
+                        autoPlay 
+                      />
+                    ) : (
+                      <img 
+                        src={selectedLightboxMedia.url} 
+                        className="w-full h-full object-contain" 
+                        alt={selectedLightboxMedia.name} 
+                        referrerPolicy="no-referrer"
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
 
           </AnimatePresence>
@@ -3506,6 +3898,172 @@ export default function App() {
                                     className="p-1 text-slate-550 hover:text-rose-450 transition"
                                   >
                                     <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* TAGESABLAUF-PLANER (ROUTINEN) */}
+                      <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl space-y-4">
+                        <div>
+                          <h4 className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                            <Calendar className="w-4 h-4 text-indigo-400" />
+                            Tagesablauf &amp; Routinen verwalten (Mein Tagesablauf)
+                          </h4>
+                          <p className="text-[10px] text-slate-500">
+                            Stelle den Tagesablauf (z.B. Aufstehen, Zähneputzen, Freizeit, Abendessen) für {activeEditChild.name} ein.
+                          </p>
+                        </div>
+
+                        {/* ADD ROUTINE ITEM */}
+                        <div className="flex flex-wrap gap-2 items-center bg-slate-900 p-3 rounded-xl border border-slate-850">
+                          <input
+                            type="text"
+                            placeholder="Zeit (z.B. 08:30)"
+                            value={newScheduleTime}
+                            onChange={(e) => setNewScheduleTime(e.target.value)}
+                            className="w-20 bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Aktivität (z.B. Gemeinsames Frühstück)"
+                            value={newScheduleTitle}
+                            onChange={(e) => setNewScheduleTitle(e.target.value)}
+                            className="flex-1 min-w-[150px] bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white"
+                          />
+                          <select
+                            value={newScheduleEmoji}
+                            onChange={(e) => setNewScheduleEmoji(e.target.value)}
+                            className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white font-mono"
+                          >
+                            <option value="☀️">☀️ Morgenstund</option>
+                            <option value="🥞">🥞 Frühstück</option>
+                            <option value="🦷">🦷 Zähne putzen</option>
+                            <option value="🎒">🎒 Schule &amp; Lernen</option>
+                            <option value="🍱">🍱 Mittagessen</option>
+                            <option value="🧩">🧩 Spielzeit</option>
+                            <option value="🍎">🍎 Snack</option>
+                            <option value="🌳">🌳 Ausflug</option>
+                            <option value="🛁">🛁 Badewanne</option>
+                            <option value="📖">📖 Vorlesen</option>
+                            <option value="🛌">🛌 Schlafenszeit</option>
+                            <option value="✨">✨ Magie</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newScheduleTitle.trim()) return;
+                              const sObj = {
+                                id: "sch-" + Date.now(),
+                                time: newScheduleTime,
+                                title: newScheduleTitle,
+                                emoji: newScheduleEmoji,
+                                completed: false
+                              };
+                              const currentSchedule = activeEditChild.schedule || [];
+                              updateSelectedChildProperties(c => ({
+                                ...c,
+                                schedule: [...currentSchedule, sObj]
+                              }));
+                              setNewScheduleTitle("");
+                              addUiLog(`Aktivität "${newScheduleTitle}" zum Tagesablauf hinzugefügt.`, "success");
+                            }}
+                            className="bg-indigo-650 hover:bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition"
+                          >
+                            Aktivität hinzufügen
+                          </button>
+                        </div>
+
+                        {/* LIST ROUTINES */}
+                        {(!activeEditChild.schedule || activeEditChild.schedule.length === 0) ? (
+                          <p className="text-xs text-slate-550 italic text-center p-4 bg-slate-955 rounded-xl">Keine Aktivitäten im Tagesablauf hinterlegt. Standardplan wird verwendet.</p>
+                        ) : (
+                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                            {activeEditChild.schedule.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-850 text-xs text-slate-205"
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-lg shrink-0">{item.emoji}</span>
+                                  <span className="font-mono bg-slate-955 px-1.5 py-0.5 rounded border border-slate-850 text-[10px] text-indigo-400 font-bold shrink-0">{item.time}</span>
+                                  <span className="font-semibold text-slate-200 truncate">{item.title}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {item.completed ? (
+                                    <span className="text-[9px] font-mono text-emerald-400 font-bold bg-emerald-950 px-2 py-0.5 rounded border border-emerald-900">
+                                      ERLEDIGT
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] font-mono text-slate-450 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
+                                      OFFEN
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      const nextS = activeEditChild.schedule.filter(s => s.id !== item.id);
+                                      updateSelectedChildProperties(c => ({
+                                        ...c,
+                                        schedule: nextS
+                                      }));
+                                      addUiLog(`Aktivität gelöscht.`, "info");
+                                    }}
+                                    className="p-1 text-slate-550 hover:text-rose-450 transition"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* GALLERIE-VERWALTUNG (FOTOS & VIDEOS) */}
+                      <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl space-y-4">
+                        <div>
+                          <h4 className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                            <Image className="w-4 h-4 text-emerald-400" />
+                            Kinder-Galerie &amp; Fotos verwalten
+                          </h4>
+                          <p className="text-[10px] text-slate-500">
+                            Hier siehst du alle hochgeladenen Bilder und Videos von {activeEditChild.name}.
+                          </p>
+                        </div>
+
+                        {(!activeEditChild.mediaGallery || activeEditChild.mediaGallery.length === 0) ? (
+                          <p className="text-xs text-slate-550 italic text-center p-4 bg-slate-955 rounded-xl">Noch keine Galeriefotos oder Videos hochgeladen.</p>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                            {activeEditChild.mediaGallery.map((media) => (
+                              <div key={media.id} className="relative group rounded-xl overflow-hidden bg-slate-900 border border-slate-850 flex flex-col justify-between">
+                                <div className="aspect-[4/3] w-full bg-slate-955 flex items-center justify-center relative">
+                                  {media.fileType === "video" ? (
+                                    <div className="text-xl">🎥</div>
+                                  ) : (
+                                    <img src={media.url} className="w-full h-full object-cover" alt={media.name} referrerPolicy="no-referrer" />
+                                  )}
+                                  <span className="absolute top-1 left-1 rounded bg-black/80 border border-slate-850 px-1 text-[7px] text-indigo-400 font-mono scale-90">
+                                    {media.fileType === "video" ? "VIDEO" : "BILD"}
+                                  </span>
+                                </div>
+                                <div className="p-1 text-[8px] bg-slate-950/90 text-slate-400 font-mono flex items-center justify-between">
+                                  <span className="truncate max-w-[50px]">{media.name}</span>
+                                  <button
+                                    onClick={() => {
+                                      const nextGal = activeEditChild.mediaGallery.filter(m => m.id !== media.id);
+                                      updateSelectedChildProperties(c => ({
+                                        ...c,
+                                        mediaGallery: nextGal
+                                      }));
+                                      addUiLog("Medien-Asset gelöscht", "info");
+                                    }}
+                                    className="p-0.5 px-1 bg-rose-950/45 hover:bg-rose-900 border border-rose-955 text-rose-300 rounded hover:text-white text-[7px]"
+                                  >
+                                    Löschen
                                   </button>
                                 </div>
                               </div>

@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>FamilySpace</title>
+
+<!-- Firebase SDK v10 – direkt vom Google CDN, kein Build nötig -->
+<script type="module">
+import { initializeApp }                        from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword,
+         signInWithEmailAndPassword, signOut,
+         onAuthStateChanged, updateProfile }    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc,
+         addDoc, setDoc, getDoc, getDocs,
+         updateDoc, deleteDoc, query,
+         where, orderBy, serverTimestamp }      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getStorage, ref, uploadBytes,
+         getDownloadURL, deleteObject }         from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+// ══════════════════════════════════════════════════════════
+//  ⬇️  DEINE FIREBASE-KONFIGURATION HIER EINTRAGEN
+//  (Firebase Console → Projekteinstellungen → Web-App)
+// ══════════════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey:            "DEIN_API_KEY",
+  authDomain:        "DEIN_PROJEKT.firebaseapp.com",
+  projectId:         "DEIN_PROJEKT_ID",
+  storageBucket:     "DEIN_PROJEKT.appspot.com",
+  messagingSenderId: "DEINE_SENDER_ID",
+  appId:             "DEINE_APP_ID"
+};
+
+// Demo-Modus: true = kein Firebase nötig, alles lokal
+const DEMO_MODE = true;
+
+// ── Firebase initialisieren ───────────────────────────────
+let app, auth, db, storage;
+if (!DEMO_MODE) {
+  app     = initializeApp(firebaseConfig);
+  auth    = getAuth(app);
+  db      = getFirestore(app);
+  storage = getStorage(app);
+}
+
+// ══════════════════════════════════════════════════════════
+//  DEMO-DATENBANK (localStorage)
+// ══════════════════════════════════════════════════════════
+const LS = {
+  get:  (k)       => JSON.parse(localStorage.getItem('fs2_'+k)||'null'),
+  set:  (k,v)     => localStorage.setItem('fs2_'+k, JSON.stringify(v)),
+  push: (k, item) => {
+    const arr = LS.get(k)||[];
+    const obj = {...item, id:'id_'+Date.now()+'_'+Math.random().toString(36).slice(2), createdAt: new Date().toISOString()};
+    arr.push(obj); LS.set(k,arr); return obj;
+  },
+  upd:  (k,id,ch) => {
+    const arr = LS.get(k)||[];
+    const i   = arr.findIndex(x=>x.id===id);
+    if(i>=0){arr[i]={...arr[i],...ch}; LS.set(k,arr); return arr[i];} return null;
+  },
+  del:  (k,id)    => LS.set(k,(LS.get(k)||[]).filter(x=>x.id!==id)),
+  find: (k,fn)    => (LS.get(k)||[]).filter(fn),
+};
+
+// ══════════════════════════════════════════════════════════
+//  FIREBASE API WRAPPER
+// ══════════════════════════════════════════════════════════
+const FB = {
+  // AUTH
+  async register(email, pw, name) {
+    if (DEMO_MODE) {
+      const users = LS.get('users')||[];
+      if (users.find(u=>u.email===email)) throw new Error('E-Mail bereits registriert');
+      const u = {id:'u_'+Date.now(), email, name, pw:btoa(pw)};
+      users.push(u); LS.set('users',u); return u;
+    }
+    const cred = await createUserWithEmailAndPassword(auth, email, pw);
+    await updateProfile(cred.user, {displayName: name});
+    await setDoc(doc(db,'users',cred.user.uid),{name, email, createdAt: serverTimestamp()});
+    return cred.user;
+  },
+
+  async login(email, pw) {
+    if (DEMO_MODE) {
+      const users = LS.get('users')||[];
+      const u = users.find(x=>x.email===email && x.pw===btoa(pw));
+      if (!u) throw new Error('Falsche E-Mail oder Passwort');
+      return u;
+    }
+    const cred = await signInWithEmailAndPassword(auth, email, pw);
+    return cred.user;
+  },
+
+  async logout() {
+    if (!DEMO_MODE) await signOut(auth);
+  },
+
+  // KINDER
+  async getKinder(uid) {
+    if (DEMO_MODE) return LS.find('kinder', k=>k.uid===uid);
+    const snap = await getDocs(collection(db,'users',uid,'kinder'));
+    return snap.docs.map(d=>({id:d.id,...d.data()}));
+  },
+
+  async addKind(uid, data) {
+    if (DEMO_MODE) return LS.push('kinder',{...data, uid});
+    const ref = await addDoc(collection(db,'users',uid,'kinder'),{...data, createdAt:serverTimestamp()});
+    return {id:ref.id,...data};
+  },
+
+  async updateKind(uid, id, data) {
+    if (DEMO_MODE) return LS.upd('kinder',id,data);
+    await updateDoc(doc(db,'users',uid,'kinder',id),data);
+  },
+
+  async deleteKind(uid, id) {
+    if (DEMO_MODE) return LS.del('kinder',id);
+    await deleteDoc(doc(db,'users',uid,'kinder',id));
+  },
+
+  // TAGESPLAN
+  async getEintraege(uid, kindId, datum) {
+    if (DEMO_MODE) return LS.find('eintraege', e=>e.uid===uid && e.kindId===kindId && e.datum===datum)
+                             .sort((a,b)=>(a.zeitVon||'').localeCompare(b.zeitVon||''));
+    const q    = query(collection(db,'users',uid,'kinder',kindId,'eintraege'),
+                        where('datum','==',datum), orderBy('zeitVon'));
+    const snap = await getDocs(q);
+    return snap.docs.map(d=>({id:d.id,...d.data()}));
+  },
+
+  async addEintrag(uid, kindId, data) {
+    if (DEMO_MODE) return LS.push('eintraege',{...data, uid, kindId});
+    const ref = await addDoc(collection(db,'users',uid,'kinder',kindId,'eintraege'),
+                              {...data, createdAt:serverTimestamp()});
+    return {id:ref.id,...data};
+  },
+
+  async updateEintrag(uid, kindId, id, data) {
+    if (DEMO_MODE) return LS.upd('eintraege',id,data);
+    await updateDoc(doc(db,'users',uid,'kinder',kindId,'eintraege',id),data);
+  },
+
+  async deleteEintrag(uid, kindId, id) {
+    if (DEMO_MODE) return LS.del('eintraege',id);
+    await deleteDoc(doc(db,'users',uid,'kinder',kindId,'eintraege',id));
+  },
+
+  // AUFGABEN
+  async getAufgaben(uid, kindId) {
+    if (DEMO_MODE) return LS.find('aufgaben', a=>a.uid===uid && a.kindId===kindId);
+    const snap = await getDocs(collection(db,'users',uid,'kinder',kindId,'aufgaben'));
+    return snap.docs.map(d=>({id:d.id,...d.data()}));
+  },
+
+  async addAufgabe(uid, kindId, data) {
+    if (DEMO_MODE) return LS.push('aufgaben',{...data, uid, kindId});
+    const ref = await addDoc(collection(db,'users',uid,'kinder',kindId,'aufgaben'),
+                              {...data, createdAt:serverTimestamp()});
+    return {id:ref.id,...data};
+  },
+
+  async updateAufgabe(uid, kindId, id, data) {
+    if (DEMO_MODE) return LS.upd('aufgaben',id,data);
+    await updateDoc(doc(db,'users',uid,'kinder',kindId,'aufgaben',id),data);
+  },
+
+  async deleteAufgabe(uid, kindId, id) {
+    if (DEMO_MODE) return LS.del('aufgaben',id);
+    await deleteDoc(doc(db,'users',uid,'kinder',kindId,'aufgaben',id));
+  },
+
+  // MEDIEN
+  async getMedien(uid, kindId) {
+    if (DEMO_MODE) return LS.find('medien', m=>m.uid===uid && m.kindId===kindId);
+    const snap = await getDocs(collection(db,'users',uid,'kinder',kindId,'medien'));
+    return snap.docs.map(d=>({id:d.id,...d.data()}));
+  },
+
+  async uploadMedium(uid, kindId, file, onProgress) {
+    if (DEMO_MODE) {
+      return new Promise(res => {
+        const reader = new FileReader();
+        reader.onload = async e => {
+          onProgress(70);
+          const med = LS.push('medien',{uid, kindId, url:e.target.result,
+            name:file.name, typ:file.type.startsWith('image')?'bild':'video'});
+          onProgress(100);
+          res(med);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    const path    = `users/${uid}/${kindId}/${Date.now()}_${file.name}`;
+    const stRef   = ref(storage, path);
+    await uploadBytes(stRef, file);
+    onProgress(80);
+    const url     = await getDownloadURL(stRef);
+    onProgress(95);
+    const ref2    = await addDoc(collection(db,'users',uid,'kinder',kindId,'medien'),
+                    {url, name:file.name, storagePath:path,
+                     typ:file.type.startsWith('image')?'bild':'video',
+                     createdAt:serverTimestamp()});
+    onProgress(100);
+    return {id:ref2.id, url, name:file.name};
+  },
+
+  async deleteMedium(uid, kindId, id, storagePath) {
+    if (DEMO_MODE) return LS.del('medien',id);
+    if (storagePath) await deleteObject(ref(storage, storagePath));
+    await deleteDoc(doc(db,'users',uid,'kinder',kindId,'medien',id));
+  },
+};
+
+// ══════════════════════════════════════════════════════════
+//  APP STATE
+// ══════════════════════════════════════════════════════════
+const S = {
+  user:     null,   // { id, name, email }
+  kinder:   [],
+  aktKind:  null,
+  eintraege:[],
+  medien:   [],
+  aufgaben: [],
+  tpKindId: '',
+  tpDatum:  '',
+};
+
+// ══════════════════════════════════════════════════════════
+//  DOM HELPERS
+// ══════════════════════════════════════════════════════════
+const $  = id => document.getElementById(id);
+const el = (tag, cls, html='') => { const e=document.createElement(tag); if(cls) e.className=cls; e.innerHTML=html; return e; };
+
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  $(id)?.classList.add('active');
+  window.scrollTo(0,0);
+}
+
+function toast(msg, ok=false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#10b98122' : '#1c2030';
+  t.style.borderColor = ok ? '#10b98160' : '#2e3348';
+  t.style.color       = ok ? '#34d399'   : '#e2e6f0';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2800);
+}
+
+function openModal(id)  { $(id)?.classList.add('open'); }
+function closeModal(id) { $(id)?.classList.remove('open'); }
+
+function setLoading(btnId, loading, label='Speichern') {
+  const b = $(btnId);
+  if (!b) return;
+  b.disabled = loading;
+  b.innerHTML = loading ? '<span class="spin"></span> Bitte warten...' : label;
+}
+
+// ══════════════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════════════
+window.elternLogin = async () => {
+  const email = $('login-email').value.trim();
+  const pw    = $('login-pw').value;
+  if (!email||!pw) { toast('Bitte alle Felder ausfüllen'); return; }
+  setLoading('login-btn', true, 'Anmelden');
+  try {
+    const u = await FB.login(email, pw);
+    S.user = { id: u.id||u.uid, name: u.name||u.displayName||email.split('@')[0], email };
+    LS.set('session', S.user);
+    afterLogin();
+  } catch(e) { toast('❌ ' + (e.message||'Login fehlgeschlagen')); }
+  setLoading('login-btn', false, 'Anmelden');
+};
+
+window.elternRegister = async () => {
+  const name  = $('reg-name').value.trim();
+  const email = $('reg-email').value.trim();
+  const pw    = $('reg-pw').value;
+  if (!name||!email||!pw) { toast('Alle Felder ausfüllen'); return; }
+  if (pw.length < 8)      { toast('Passwort mind. 8 Zeichen'); return; }
+  setLoading('reg-btn', true, 'Registrieren');
+  try {
+    await FB.register(email, pw, name);
+    toast('✅ Konto erstellt! Bitte einloggen.', true);
+    showView('v-login');
+  } catch(e) { toast('❌ ' + (e.message||'Fehler')); }
+  setLoading('reg-btn', false, 'Konto erstellen');
+};
+
+window.elternLogout = async () => {
+  await FB.logout();
+  S.user = null; S.kinder = []; S.aktKind = null;
+  LS.set('session', null);
+  showView('v-landing');
+  renderLandingKinder();
+  toast('Abgemeldet');
+};
+
+async function afterLogin() {
+  $('eltern-name').textContent = S.user.name;
+  await ladeKinder();
+  showView('v-dashboard');
+  toast('👋 Willkommen, ' + S.user.name + '!', true);
+}
+
+// ══════════════════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════════════════
+window.elternTab = (btn, panelId) => {
+  document.querySelectorAll('.etab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.epanel').forEach(p=>p.style.display='none');
+  $(panelId).style.display='';
+  if (panelId==='ep-kinder')   ladeKinder();
+  if (panelId==='ep-tagesplan') { fuelleKindSelect('tp-kind'); syncTpDatum(); }
+  if (panelId==='ep-medien')   fuelleKindSelect('med-kind');
+  if (panelId==='ep-aufgaben') fuelleKindSelect('auf-kind');
+};
+
+window.kindTab = (btn, panelId) => {
+  document.querySelectorAll('.ktab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.kpanel').forEach(p=>p.style.display='none');
+  $(panelId).style.display='';
+};
+
+function syncTpDatum() {
+  if (!$('tp-datum').value) $('tp-datum').value = new Date().toISOString().split('T')[0];
+}
+
+// ══════════════════════════════════════════════════════════
+//  KINDER
+// ══════════════════════════════════════════════════════════
+async function ladeKinder() {
+  S.kinder = await FB.getKinder(S.user.id);
+  renderKinder();
+  renderLandingKinder();
+}
+
+function renderKinder() {
+  const el = $('kinder-liste');
+  if (!S.kinder.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">👶</div><p>Noch kein Kind angelegt</p></div>`;
+    return;
+  }
+  el.innerHTML = S.kinder.map(k=>`
+    <div class="kind-row">
+      <div class="avatar" style="background:${k.farbe}22;border:2px solid ${k.farbe}55">${k.emoji||'🧒'}</div>
+      <div class="kind-row-info">
+        <strong>${k.name}</strong>
+        <span class="muted">${k.pin?'PIN gesetzt':'Kein PIN'}</span>
+      </div>
+      <button class="icon-btn" onclick="openKindModal('${k.id}')">✏️</button>
+      <button class="icon-btn danger" onclick="loescheKind('${k.id}')">🗑️</button>
+    </div>
+  `).join('');
+}
+
+function renderLandingKinder() {
+  const c = LS.get('session');
+  const el = $('landing-kinder');
+  const kinder = c ? LS.find('kinder', k=>k.uid===c.id) : [];
+  if (!kinder.length) {
+    el.innerHTML = `<p class="muted" style="font-size:.82rem;text-align:center">Noch keine Kinder-Profile</p>`;
+    return;
+  }
+  el.innerHTML = kinder.map(k=>`
+    <button class="kind-card" onclick="kindBereich('${k.id}')">
+      <div class="avatar lg" style="background:${k.farbe}22;border:2px solid ${k.farbe}">${k.emoji||'🧒'}</div>
+      <div>
+        <div style="font-weight:800;font-size:1.05rem">${k.name}</div>
+        <div class="muted" style="font-size:.78rem">Tippen zum Öffnen →</div>
+      </div>
+    </button>
+  `).join('');
+}
+
+function fuelleKindSelect(selId) {
+  const sel = $(selId);
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">– Kind wählen –</option>';
+  S.kinder.forEach(k => {
+    const o = document.createElement('option');
+    o.value = k.id; o.textContent = k.name;
+    sel.appendChild(o);
+  });
+  if (prev) sel.value = prev;
+}
+
+window.openKindModal = (editId='') => {
+  const k = editId ? S.kinder.find(x=>x.id===editId) : null;
+  $('kind-id').value    = editId;
+  $('kind-name').value  = k?.name||'';
+  $('kind-emoji').value = k?.emoji||'🧒';
+  $('kind-farbe').value = k?.farbe||'#6366f1';
+  $('kind-pin').value   = k?.pin||'';
+  $('modal-kind-title').textContent = k ? 'Kind bearbeiten' : 'Kind anlegen';
+  openModal('modal-kind');
+};
+
+window.speichereKind = async () => {
+  const id    = $('kind-id').value;
+  const name  = $('kind-name').value.trim();
+  const emoji = $('kind-emoji').value.trim()||'🧒';
+  const farbe = $('kind-farbe').value;
+  const pin   = $('kind-pin').value.trim();
+  if (!name) { toast('Name eingeben'); return; }
+  setLoading('kind-save-btn', true);
+  try {
+    const data = {name, emoji, farbe, pin};
+    if (id) await FB.updateKind(S.user.id, id, data);
+    else    await FB.addKind(S.user.id, data);
+    closeModal('modal-kind');
+    await ladeKinder();
+    fuelleKindSelect('tp-kind');
+    fuelleKindSelect('med-kind');
+    fuelleKindSelect('auf-kind');
+    toast('✅ Gespeichert', true);
+  } catch(e) { toast('❌ Fehler: '+e.message); }
+  setLoading('kind-save-btn', false);
+};
+
+window.loescheKind = async (id) => {
+  if (!confirm('Profil löschen? Alle Daten (Tagesplan, Medien) werden entfernt.')) return;
+  try {
+    await FB.deleteKind(S.user.id, id);
+    await ladeKinder();
+    toast('Gelöscht');
+  } catch(e) { toast('❌ '+e.message); }
+};
+
+window.waehleEmoji = el => { $('kind-emoji').value = el.textContent; };
+window.waehleFarbe = c  => { $('kind-farbe').value = c; };
+
+// ══════════════════════════════════════════════════════════
+//  TAGESPLAN – ELTERN
+// ══════════════════════════════════════════════════════════
+window.ladeTagesplan = async () => {
+  S.tpKindId = $('tp-kind').value;
+  S.tpDatum  = $('tp-datum').value;
+  if (!S.tpKindId || !S.tpDatum) return;
+  S.eintraege = await FB.getEintraege(S.user.id, S.tpKindId, S.tpDatum);
+  renderTpEltern();
+};
+
+function renderTpEltern() {
+  const el = $('tp-liste');
+  if (!S.eintraege.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><p>Noch keine Einträge</p></div>`;
+    return;
+  }
+  el.innerHTML = S.eintraege.map(e=>`
+    <div class="timeline-item${e.erledigt?' done':''}">
+      <span class="t-emoji">${e.emoji||'📌'}</span>
+      <div class="t-body">
+        <strong>${e.titel}</strong>
+        <span class="time-chip">${e.zeitVon||'--:--'} – ${e.zeitBis||'--:--'}</span>
+        ${e.beschreibung?`<p class="muted" style="font-size:.8rem;margin-top:3px">${e.beschreibung}</p>`:''}
+      </div>
+      <div class="t-actions">
+        <button class="icon-btn" onclick="openEintragModal('${e.id}')">✏️</button>
+        <button class="icon-btn danger" onclick="loescheEintrag('${e.id}')">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.openEintragModal = (editId='') => {
+  if (!S.tpKindId) { toast('Erst Kind wählen'); return; }
+  const e = editId ? S.eintraege.find(x=>x.id===editId) : null;
+  $('eintrag-id').value    = editId;
+  $('eintrag-emoji').value = e?.emoji||'📌';
+  $('eintrag-titel').value = e?.titel||'';
+  $('eintrag-von').value   = e?.zeitVon||'08:00';
+  $('eintrag-bis').value   = e?.zeitBis||'09:00';
+  $('eintrag-beschr').value= e?.beschreibung||'';
+  openModal('modal-eintrag');
+};
+
+window.speichereEintrag = async () => {
+  const id    = $('eintrag-id').value;
+  const titel = $('eintrag-titel').value.trim();
+  if (!titel) { toast('Titel eingeben'); return; }
+  setLoading('eintrag-save-btn', true);
+  const data = {
+    datum:     S.tpDatum,
+    titel,
+    emoji:     $('eintrag-emoji').value.trim()||'📌',
+    zeitVon:   $('eintrag-von').value,
+    zeitBis:   $('eintrag-bis').value,
+    beschreibung: $('eintrag-beschr').value.trim(),
+    erledigt:  false,
+  };
+  try {
+    if (id) await FB.updateEintrag(S.user.id, S.tpKindId, id, data);
+    else    await FB.addEintrag(S.user.id, S.tpKindId, data);
+    closeModal('modal-eintrag');
+    await ladeTagesplan();
+    toast('✅ Gespeichert', true);
+  } catch(e) { toast('❌ '+e.message); }
+  setLoading('eintrag-save-btn', false);
+};
+
+window.loescheEintrag = async (id) => {
+  if (!confirm('Eintrag löschen?')) return;
+  await FB.deleteEintrag(S.user.id, S.tpKindId, id);
+  await ladeTagesplan();
+  toast('Gelöscht');
+};
+
+// ══════════════════════════════════════════════════════════
+//  AUFGABEN – ELTERN
+// ══════════════════════════════════════════════════════════
+window.ladeAufgaben = async () => {
+  const kindId = $('auf-kind').value;
+  if (!kindId) return;
+  S.aufgaben = await FB.getAufgaben(S.user.id, kindId);
+  renderAufgabenEltern();
+};
+
+function renderAufgabenEltern() {
+  const el = $('auf-liste');
+  if (!S.aufgaben.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⭐</div><p>Noch keine Aufgaben</p></div>`;
+    return;
+  }
+  el.innerHTML = S.aufgaben.map(a=>`
+    <div class="timeline-item">
+      <span class="t-emoji">${a.emoji||'⭐'}</span>
+      <div class="t-body">
+        <strong>${a.titel}</strong>
+        <span class="badge-pts">${a.punkte||1} Punkt${a.punkte!==1?'e':''}</span>
+      </div>
+      <div class="t-actions">
+        <button class="icon-btn danger" onclick="loescheAufgabe('${a.id}')">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.speichereAufgabe = async () => {
+  const kindId = $('auf-kind').value;
+  if (!kindId) { toast('Erst Kind wählen'); return; }
+  const titel  = $('auf-titel').value.trim();
+  const emoji  = $('auf-emoji').value.trim()||'⭐';
+  const punkte = parseInt($('auf-punkte').value)||1;
+  if (!titel) { toast('Titel eingeben'); return; }
+  await FB.addAufgabe(S.user.id, kindId, {titel, emoji, punkte, erledigt:false});
+  $('auf-titel').value = ''; $('auf-emoji').value='⭐'; $('auf-punkte').value='1';
+  await ladeAufgaben();
+  toast('✅ Aufgabe hinzugefügt', true);
+};
+
+window.loescheAufgabe = async (id) => {
+  const kindId = $('auf-kind').value;
+  await FB.deleteAufgabe(S.user.id, kindId, id);
+  await ladeAufgaben();
+};
+
+// ══════════════════════════════════════════════════════════
+//  MEDIEN – ELTERN
+// ══════════════════════════════════════════════════════════
+window.ladeMedien = async () => {
+  const kindId = $('med-kind').value;
+  if (!kindId) return;
+  S.medien = await FB.getMedien(S.user.id, kindId);
+  renderMedienEltern();
+};
+
+function renderMedienEltern() {
+  const el = $('med-grid');
+  if (!S.medien.length) {
+    el.innerHTML = `<p class="muted" style="grid-column:1/-1;text-align:center;padding:24px">Noch keine Medien</p>`;
+    return;
+  }
+  el.innerHTML = S.medien.map(m=>`
+    <div class="media-thumb" onclick="zeigeMedia('${m.url}','${m.name}')">
+      ${m.typ==='bild'
+        ? `<img src="${m.url}" alt="${m.name}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`
+        : `<div class="video-thumb">🎬</div>`}
+      <button class="del-media" onclick="event.stopPropagation();loescheMedium('${m.id}','${m.storagePath||''}')">✕</button>
+    </div>
+  `).join('');
+}
+
+window.uploadMedium = async (ev) => {
+  const file   = ev.target.files[0];
+  if (!file) return;
+  const kindId = $('med-kind').value;
+  if (!kindId) { toast('Erst Kind wählen'); return; }
+  const prog  = $('upload-prog');
+  const bar   = $('upload-bar');
+  const label = $('upload-label');
+  prog.style.display='';
+  try {
+    await FB.uploadMedium(S.user.id, kindId, file, pct => {
+      bar.style.width = pct+'%';
+      label.textContent = pct<100 ? `Hochladen... ${pct}%` : 'Fertig!';
+    });
+    setTimeout(()=>{ prog.style.display='none'; bar.style.width='0%'; }, 1200);
+    await ladeMedien();
+    toast('✅ Hochgeladen', true);
+  } catch(e) { toast('❌ Upload fehlgeschlagen: '+e.message); prog.style.display='none'; }
+  ev.target.value='';
+};
+
+window.loescheMedium = async (id, path) => {
+  if (!confirm('Bild löschen?')) return;
+  const kindId = $('med-kind').value;
+  await FB.deleteMedium(S.user.id, kindId, id, path);
+  await ladeMedien();
+  toast('Gelöscht');
+};
+
+window.zeigeMedia = (url, name) => {
+  $('media-img').src = url; $('media-img').alt = name;
+  openModal('modal-media');
+};
+
+// ══════════════════════════════════════════════════════════
+//  KINDERBEREICH
+// ══════════════════════════════════════════════════════════
+window.kindBereich = async (kindId) => {
+  const session = LS.get('session');
+  if (!session) { toast('Bitte als Elternteil anmelden'); return; }
+  if (!S.user) S.user = session;
+
+  const kinder = await FB.getKinder(S.user.id);
+  S.aktKind = kinder.find(k=>k.id===kindId);
+  if (!S.aktKind) { toast('Kind nicht gefunden'); return; }
+
+  $('k-avatar').textContent = S.aktKind.emoji||'🌟';
+  $('k-name').textContent   = 'Hallo, '+S.aktKind.name+'! 👋';
+  $('k-datum').textContent  = new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'});
+
+  try { document.documentElement.requestFullscreen(); } catch(_) {}
+  showView('v-kind');
+
+  // Reset tabs
+  document.querySelectorAll('.ktab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.kpanel').forEach(p=>p.style.display='none');
+  $('btn-k-tagesplan').classList.add('active');
+  $('kp-tagesplan').style.display='';
+
+  await ladeKindTagesplan();
+  await ladeKindMedien();
+  await ladeKindAufgaben();
+};
+
+async function ladeKindTagesplan() {
+  const heute = new Date().toISOString().split('T')[0];
+  const liste = await FB.getEintraege(S.user.id, S.aktKind.id, heute);
+  const el    = $('k-tp-liste');
+  const done  = liste.filter(e=>e.erledigt).length;
+  updateFortschritt(done, liste.length);
+  if (!liste.length) {
+    el.innerHTML=`<div class="k-empty"><p style="font-size:3rem">🌈</p><p class="muted">Heute noch kein Plan</p></div>`;
+    return;
+  }
+  el.innerHTML = liste.map(e=>`
+    <div class="k-item${e.erledigt?' done':''}" onclick="kindAbhaken('${e.id}','eintraege')">
+      <span class="k-emoji">${e.emoji||'📌'}</span>
+      <div class="k-item-body">
+        <strong>${e.titel}</strong>
+        <span class="time-chip">${e.zeitVon||''} – ${e.zeitBis||''}</span>
+        ${e.beschreibung?`<p class="muted" style="font-size:.8rem">${e.beschreibung}</p>`:''}
+      </div>
+      <span class="k-check">${e.erledigt?'✅':'⬜'}</span>
+    </div>
+  `).join('');
+}
+
+async function ladeKindMedien() {
+  const medien = await FB.getMedien(S.user.id, S.aktKind.id);
+  const el = $('k-med-grid');
+  if (!medien.length) {
+    el.innerHTML=`<p class="muted" style="grid-column:1/-1;text-align:center;padding:24px">Noch keine Bilder</p>`;
+    return;
+  }
+  el.innerHTML = medien.map(m=>`
+    <div class="media-thumb" onclick="zeigeMedia('${m.url}','${m.name}')">
+      ${m.typ==='bild'
+        ? `<img src="${m.url}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`
+        : `<div class="video-thumb">🎬</div>`}
+    </div>
+  `).join('');
+}
+
+async function ladeKindAufgaben() {
+  const aufgaben = await FB.getAufgaben(S.user.id, S.aktKind.id);
+  const el = $('k-auf-liste');
+  if (!aufgaben.length) {
+    el.innerHTML=`<div class="k-empty"><p style="font-size:3rem">✨</p><p class="muted">Keine Aufgaben</p></div>`;
+    return;
+  }
+  el.innerHTML = aufgaben.map(a=>`
+    <div class="k-item${a.erledigt?' done':''}" onclick="kindAbhaken('${a.id}','aufgaben')">
+      <span class="k-emoji">${a.emoji||'⭐'}</span>
+      <div class="k-item-body">
+        <strong>${a.titel}</strong>
+        <span class="badge-pts">${a.punkte||1} Punkt${a.punkte!==1?'e':''}</span>
+      </div>
+      <span class="k-check">${a.erledigt?'✅':'⬜'}</span>
+    </div>
+  `).join('');
+}
+
+window.kindAbhaken = async (id, type) => {
+  if (!S.aktKind) return;
+  if (type==='eintraege') {
+    const e = LS.find('eintraege', x=>x.id===id)[0] ||
+              S.eintraege.find(x=>x.id===id);
+    if (!e) return;
+    await FB.updateEintrag(S.user.id, S.aktKind.id, id, {erledigt:!e.erledigt});
+    await ladeKindTagesplan();
+  } else {
+    const a = LS.find('aufgaben', x=>x.id===id)[0];
+    if (!a) return;
+    await FB.updateAufgabe(S.user.id, S.aktKind.id, id, {erledigt:!a.erledigt});
+    await ladeKindAufgaben();
+    if (!a.erledigt) toast('⭐ Super gemacht!');
+  }
+};
+
+function updateFortschritt(done, total) {
+  $('k-progress-text').textContent = `${done}/${total}`;
+  $('k-progress-bar').style.width  = total ? `${Math.round(done/total*100)}%` : '0%';
+}
+
+// ══════════════════════════════════════════════════════════
+//  PIN / VERLASSEN
+// ══════════════════════════════════════════════════════════
+window.pinVerlassen = () => {
+  $('pin-input').value='';
+  openModal('modal-pin');
+  setTimeout(()=>$('pin-input').focus(), 150);
+};
+
+window.pinPruefen = () => {
+  const eingabe = $('pin-input').value;
+  const pin     = S.aktKind?.pin;
+  if (!pin || eingabe===pin) {
+    closeModal('modal-pin');
+    try { document.exitFullscreen(); } catch(_) {}
+    S.aktKind = null;
+    showView('v-landing');
+    renderLandingKinder();
+    toast('Auf Wiedersehen! 👋');
+  } else {
+    toast('❌ Falscher PIN');
+    $('pin-input').value='';
+    $('pin-input').focus();
+  }
+};
+
+// ══════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════
+function init() {
+  // Heutiges Datum
+  const heute = new Date().toISOString().split('T')[0];
+  $('tp-datum').value = heute;
+
+  // Demo-Banner
+  $('demo-banner').style.display = DEMO_MODE ? '' : 'none';
+
+  // Session wiederherstellen
+  const sess = LS.get('session');
+  if (sess) {
+    S.user    = sess;
+    S.kinder  = LS.find('kinder', k=>k.uid===sess.id);
+  }
+  renderLandingKinder();
+
+  // Enter-Keys
+  $('pin-input').addEventListener('keydown',  e=>e.key==='Enter'&&pinPruefen());
+  $('login-pw').addEventListener('keydown',   e=>e.key==='Enter'&&elternLogin());
+  $('eintrag-titel').addEventListener('keydown', e=>e.key==='Enter'&&speichereEintrag());
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+
+<style>
+/* ══ RESET & TOKENS ══════════════════════════════════════ */
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+:root {
+  --bg:     #0c0e14;
+  --s1:     #13161f;
+  --s2:     #1c2030;
+  --border: #262b3d;
+  --text:   #e2e6f0;
+  --muted:  #5a6280;
+  --indigo: #6366f1;
+  --green:  #10b981;
+  --amber:  #f59e0b;
+  --rose:   #f43f5e;
+  --r:      14px;
+  --font:   system-ui,-apple-system,sans-serif;
+}
+body { background:var(--bg); color:var(--text); font-family:var(--font); min-height:100vh; }
+
+/* ══ VIEWS ═══════════════════════════════════════════════ */
+.view { display:none; min-height:100vh; flex-direction:column; }
+.view.active { display:flex; }
+
+/* ══ SHARED ══════════════════════════════════════════════ */
+.card { background:var(--s2); border:1px solid var(--border); border-radius:var(--r); padding:18px; }
+.muted { color:var(--muted); font-size:.82rem; }
+.label { font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:11px 18px; border-radius:10px; font-size:.88rem; font-weight:700; cursor:pointer; border:none; transition:all .15s; }
+.btn-full { width:100%; }
+.btn-primary { background:var(--indigo); color:#fff; }
+.btn-primary:hover { filter:brightness(1.12); }
+.btn-ghost { background:transparent; color:var(--muted); border:1px solid var(--border); }
+.btn-ghost:hover { background:var(--s2); color:var(--text); }
+.btn-sm { padding:7px 13px; font-size:.8rem; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+
+input, select, textarea {
+  background:var(--s1); border:1px solid var(--border); border-radius:10px;
+  color:var(--text); padding:11px 13px; font-size:.88rem; width:100%;
+  font-family:var(--font); outline:none; transition:border-color .15s;
+}
+input:focus, select:focus, textarea:focus { border-color:var(--indigo); }
+.field { display:flex; flex-direction:column; gap:5px; }
+.stack { display:flex; flex-direction:column; gap:10px; }
+.row   { display:flex; gap:10px; align-items:center; }
+
+.avatar { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.3rem; flex-shrink:0; }
+.avatar.lg { width:56px; height:56px; font-size:1.8rem; }
+
+.icon-btn { background:none; border:1px solid var(--border); border-radius:8px; padding:6px 10px; cursor:pointer; font-size:.9rem; color:var(--muted); transition:all .15s; }
+.icon-btn:hover { background:var(--s2); color:var(--text); }
+.icon-btn.danger:hover { background:#f43f5e22; color:var(--rose); border-color:var(--rose); }
+
+.topbar { background:var(--s1); border-bottom:1px solid var(--border); padding:13px 18px; display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:50; }
+.topbar-title { font-weight:700; flex:1; }
+
+.tabs { display:flex; gap:3px; background:var(--s1); border-radius:12px; padding:4px; }
+.tab { flex:1; padding:8px; border-radius:8px; font-size:.8rem; font-weight:700; cursor:pointer; border:none; background:none; color:var(--muted); transition:all .15s; }
+.tab.active { background:var(--indigo); color:#fff; }
+.etab, .ktab { flex:1; }
+
+/* ══ LANDING ════════════════════════════════════════════ */
+#v-landing { align-items:center; justify-content:center; padding:28px 20px; }
+.landing-inner { max-width:420px; width:100%; }
+.landing-logo  { text-align:center; margin-bottom:28px; }
+.landing-logo .logo-icon { font-size:3.5rem; }
+.landing-logo h1 { font-size:2rem; font-weight:900; letter-spacing:-.03em; margin-top:8px; }
+.landing-logo p  { color:var(--muted); font-size:.88rem; margin-top:4px; }
+#demo-banner { background:#f59e0b14; border:1px solid #f59e0b35; border-radius:12px; padding:12px 16px; margin-bottom:20px; }
+#demo-banner p { font-size:.78rem; color:#d97706; }
+#demo-banner p:first-child { font-weight:800; color:#f59e0b; margin-bottom:2px; }
+.kind-card { display:flex; align-items:center; gap:14px; padding:16px; border-radius:var(--r); border:1px solid var(--border); background:var(--s2); cursor:pointer; transition:all .15s; width:100%; text-align:left; }
+.kind-card:hover { border-color:var(--indigo); transform:translateY(-1px); }
+.landing-divider { display:flex; align-items:center; gap:10px; margin:12px 0; }
+.landing-divider::before, .landing-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+.landing-divider span { color:var(--muted); font-size:.75rem; }
+
+/* ══ AUTH ═══════════════════════════════════════════════ */
+#v-login, #v-register { align-items:center; justify-content:center; padding:24px 20px; }
+.auth-card { max-width:400px; width:100%; }
+.auth-back { margin-bottom:16px; }
+
+/* ══ DASHBOARD ══════════════════════════════════════════ */
+#v-dashboard .content { max-width:520px; margin:0 auto; padding:18px; width:100%; }
+.tabs-bar { margin-bottom:18px; }
+
+.kind-row { display:flex; align-items:center; gap:12px; padding:14px; background:var(--s2); border:1px solid var(--border); border-radius:12px; }
+.kind-row-info { flex:1; display:flex; flex-direction:column; gap:2px; }
+.kind-row-info strong { font-size:.9rem; }
+
+.timeline-item { display:flex; gap:12px; align-items:flex-start; padding:14px; border:1px solid var(--border); border-radius:12px; background:var(--s2); }
+.timeline-item.done { opacity:.55; border-color:var(--green); background:#10b98108; }
+.t-emoji { font-size:1.4rem; flex-shrink:0; }
+.t-body  { flex:1; display:flex; flex-direction:column; gap:4px; }
+.t-actions { display:flex; gap:5px; }
+.time-chip { font-size:.7rem; font-family:monospace; background:var(--s1); border:1px solid var(--border); border-radius:6px; padding:2px 7px; color:var(--muted); width:fit-content; }
+.badge-pts { font-size:.7rem; background:#f59e0b18; color:var(--amber); border:1px solid #f59e0b35; border-radius:99px; padding:2px 8px; width:fit-content; }
+
+.empty { text-align:center; padding:36px 20px; color:var(--muted); }
+.empty-icon { font-size:2.5rem; margin-bottom:8px; }
+
+/* upload */
+.upload-zone { border:2px dashed var(--border); border-radius:var(--r); padding:24px; text-align:center; cursor:pointer; transition:border-color .15s; }
+.upload-zone:hover { border-color:var(--indigo); }
+.prog-bar { height:6px; background:var(--border); border-radius:99px; overflow:hidden; margin-top:8px; }
+.prog-fill { height:100%; background:var(--green); border-radius:99px; transition:width .3s; }
+.media-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.media-thumb { aspect-ratio:1; border-radius:10px; overflow:hidden; border:1px solid var(--border); background:var(--s2); cursor:pointer; position:relative; transition:transform .15s; }
+.media-thumb:hover { transform:scale(1.03); }
+.video-thumb { width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:2rem; }
+.del-media { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.7); border:none; color:#fff; border-radius:50%; width:22px; height:22px; font-size:.7rem; cursor:pointer; display:none; align-items:center; justify-content:center; }
+.media-thumb:hover .del-media { display:flex; }
+
+/* ══ KINDERBEREICH ══════════════════════════════════════ */
+#v-kind { background:linear-gradient(160deg,#10072a 0%,#0a1a35 100%); }
+#v-kind .content { max-width:480px; margin:0 auto; padding:20px; width:100%; }
+.k-header { text-align:center; padding:24px 0 18px; }
+.k-avatar-big { font-size:3.8rem; margin-bottom:8px; }
+.k-header h2  { font-size:1.5rem; font-weight:900; }
+.k-header p   { color:var(--muted); font-size:.82rem; margin-top:4px; }
+
+.k-progress { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:14px; margin-bottom:18px; }
+.k-progress .row { justify-content:space-between; margin-bottom:8px; }
+.k-progress .row span:first-child { font-size:.85rem; font-weight:600; }
+.k-progress .row span:last-child  { font-size:.85rem; color:var(--green); font-weight:800; }
+.prog-bar-track { height:6px; background:rgba(255,255,255,.1); border-radius:99px; overflow:hidden; }
+
+.k-nav { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:18px; }
+.k-nav-btn { display:flex; flex-direction:column; align-items:center; gap:6px; padding:18px 10px; border-radius:16px; font-size:.82rem; font-weight:800; cursor:pointer; border:none; color:#fff; transition:all .2s; box-shadow:0 4px 16px rgba(0,0,0,.3); }
+.k-nav-btn:hover { transform:scale(1.04); }
+.k-nav-btn.active { outline:3px solid rgba(255,255,255,.5); }
+.k-nav-btn .ni { font-size:2rem; }
+.k-leave { background:linear-gradient(135deg,#f43f5e,#db2777); }
+.k-tp    { background:linear-gradient(135deg,#6366f1,#8b5cf6); }
+.k-med   { background:linear-gradient(135deg,#10b981,#059669); }
+.k-auf   { background:linear-gradient(135deg,#f59e0b,#d97706); }
+
+.k-item { display:flex; align-items:center; gap:12px; padding:16px; border:1px solid rgba(255,255,255,.1); border-radius:14px; background:rgba(255,255,255,.05); cursor:pointer; transition:all .15s; }
+.k-item:hover   { border-color:rgba(255,255,255,.25); }
+.k-item.done    { opacity:.5; border-color:var(--green); }
+.k-emoji        { font-size:2rem; flex-shrink:0; }
+.k-item-body    { flex:1; display:flex; flex-direction:column; gap:4px; }
+.k-item-body strong { font-size:1rem; }
+.k-check        { font-size:1.4rem; }
+.k-empty        { text-align:center; padding:36px 0; }
+.k-med-grid     { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+
+/* ══ MODALS ═════════════════════════════════════════════ */
+.modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:200; align-items:flex-end; justify-content:center; padding:16px; }
+.modal-bg.open { display:flex; }
+.modal { background:var(--s1); border:1px solid var(--border); border-radius:20px; padding:22px; width:100%; max-width:440px; max-height:88vh; overflow-y:auto; }
+.modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+
+/* ══ TOAST ══════════════════════════════════════════════ */
+#toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--s2); border:1px solid var(--border); border-radius:12px; padding:11px 20px; font-size:.87rem; font-weight:600; transition:transform .28s; z-index:9999; white-space:nowrap; pointer-events:none; }
+#toast.show { transform:translateX(-50%) translateY(0); }
+
+/* ══ SPINNER ════════════════════════════════════════════ */
+.spin { width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; animation:spin .6s linear infinite; display:inline-block; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ══ EMOJI PICKER ═══════════════════════════════════════ */
+.emoji-row { display:flex; flex-wrap:wrap; gap:8px; }
+.emoji-pick { font-size:1.5rem; cursor:pointer; padding:4px; border-radius:8px; transition:background .15s; }
+.emoji-pick:hover { background:var(--s2); }
+.color-row  { display:flex; gap:8px; flex-wrap:wrap; }
+.color-dot  { width:32px; height:32px; border-radius:50%; cursor:pointer; border:3px solid transparent; transition:transform .15s; }
+.color-dot:hover { transform:scale(1.15); }
+
+/* ══ RESPONSIVE ═════════════════════════════════════════ */
+@media (max-width:380px) {
+  .k-nav { grid-template-columns:repeat(2,1fr); }
+  .media-grid, .k-med-grid { grid-template-columns:repeat(2,1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ VIEW: LANDING ═══════════════════════════ -->
+<div id="v-landing" class="view">
+  <div class="landing-inner">
+    <div class="landing-logo">
+      <div class="logo-icon">🏠</div>
+      <h1>FamilySpace</h1>
+      <p>Dein Familienbereich – sicher & einfach</p>
+    </div>
+
+    <div id="demo-banner">
+      <p>⚠️ Demo-Modus aktiv</p>
+      <p>Daten nur lokal gespeichert. Firebase-Konfiguration im Code eintragen für echten Betrieb.</p>
+    </div>
+
+    <div class="stack">
+      <button class="btn btn-primary btn-full" onclick="showView('v-login')">
+        👨‍👩‍👧 Elternbereich
+      </button>
+
+      <div class="landing-divider"><span>oder direkt als Kind</span></div>
+
+      <div id="landing-kinder" class="stack"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ VIEW: LOGIN ══════════════════════════════ -->
+<div id="v-login" class="view" style="align-items:center;justify-content:center;padding:24px 20px">
+  <div class="auth-card">
+    <button class="btn btn-ghost btn-sm auth-back" onclick="showView('v-landing')">← Zurück</button>
+    <div class="card">
+      <h2 style="margin-bottom:4px">Anmelden</h2>
+      <p class="muted" style="margin-bottom:18px">Elternbereich</p>
+      <div class="stack">
+        <div class="field"><label class="label">E-Mail</label>
+          <input type="email" id="login-email" placeholder="eltern@familie.de" autocomplete="email"></div>
+        <div class="field"><label class="label">Passwort</label>
+          <input type="password" id="login-pw" placeholder="••••••••" autocomplete="current-password"></div>
+        <button class="btn btn-primary btn-full" id="login-btn" onclick="elternLogin()">Anmelden</button>
+        <button class="btn btn-ghost btn-full" onclick="showView('v-register')">Noch kein Konto? Registrieren →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ VIEW: REGISTER ═══════════════════════════ -->
+<div id="v-register" class="view" style="align-items:center;justify-content:center;padding:24px 20px">
+  <div class="auth-card">
+    <button class="btn btn-ghost btn-sm auth-back" onclick="showView('v-login')">← Zurück</button>
+    <div class="card">
+      <h2 style="margin-bottom:4px">Konto erstellen</h2>
+      <p class="muted" style="margin-bottom:18px">Für Eltern</p>
+      <div class="stack">
+        <div class="field"><label class="label">Dein Name</label>
+          <input type="text" id="reg-name" placeholder="Mama / Papa"></div>
+        <div class="field"><label class="label">E-Mail</label>
+          <input type="email" id="reg-email" placeholder="eltern@familie.de"></div>
+        <div class="field"><label class="label">Passwort (mind. 8 Zeichen)</label>
+          <input type="password" id="reg-pw" placeholder="••••••••"></div>
+        <div style="background:#10b98110;border:1px solid #10b98130;border-radius:10px;padding:12px">
+          <p style="font-size:.78rem;color:var(--green)">✅ Daten werden sicher bei Firebase (Frankfurt) gespeichert. Kein Tracking.</p>
+        </div>
+        <button class="btn btn-primary btn-full" id="reg-btn" onclick="elternRegister()">Konto erstellen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ VIEW: DASHBOARD ══════════════════════════ -->
+<div id="v-dashboard" class="view">
+  <div class="topbar">
+    <span style="font-size:1.3rem">🏠</span>
+    <span class="topbar-title">Elternbereich</span>
+    <span id="eltern-name" style="font-size:.8rem;color:var(--muted)"></span>
+    <button class="btn btn-ghost btn-sm" onclick="elternLogout()">Logout</button>
+  </div>
+  <div class="content">
+    <div class="tabs-bar">
+      <div class="tabs">
+        <button class="tab etab active" onclick="elternTab(this,'ep-kinder')">👧 Kinder</button>
+        <button class="tab etab"        onclick="elternTab(this,'ep-tagesplan')">📅 Plan</button>
+        <button class="tab etab"        onclick="elternTab(this,'ep-aufgaben')">⭐ Aufgaben</button>
+        <button class="tab etab"        onclick="elternTab(this,'ep-medien')">🖼️ Medien</button>
+      </div>
+    </div>
+
+    <!-- KINDER -->
+    <div id="ep-kinder" class="epanel">
+      <div class="row" style="justify-content:space-between;margin-bottom:14px">
+        <h3>Kinder-Profile</h3>
+        <button class="btn btn-primary btn-sm" onclick="openKindModal()">+ Neu</button>
+      </div>
+      <div id="kinder-liste" class="stack">
+        <div class="empty"><div class="spin" style="margin:0 auto 10px"></div><p>Lade...</p></div>
+      </div>
+    </div>
+
+    <!-- TAGESPLAN -->
+    <div id="ep-tagesplan" class="epanel" style="display:none">
+      <div class="row" style="justify-content:space-between;margin-bottom:14px">
+        <h3>Tagesplan</h3>
+        <button class="btn btn-primary btn-sm" onclick="openEintragModal()">+ Eintrag</button>
+      </div>
+      <div class="stack" style="margin-bottom:14px">
+        <div class="field"><label class="label">Kind</label>
+          <select id="tp-kind" onchange="ladeTagesplan()"><option value="">– Kind wählen –</option></select></div>
+        <div class="field"><label class="label">Datum</label>
+          <input type="date" id="tp-datum" onchange="ladeTagesplan()"></div>
+      </div>
+      <div id="tp-liste" class="stack">
+        <div class="empty"><p>Kind und Datum wählen</p></div>
+      </div>
+    </div>
+
+    <!-- AUFGABEN -->
+    <div id="ep-aufgaben" class="epanel" style="display:none">
+      <div class="row" style="justify-content:space-between;margin-bottom:14px">
+        <h3>Aufgaben</h3>
+      </div>
+      <div class="field" style="margin-bottom:14px">
+        <label class="label">Kind</label>
+        <select id="auf-kind" onchange="ladeAufgaben()"><option value="">– Kind wählen –</option></select>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="stack">
+          <div class="row" style="gap:8px">
+            <div class="field" style="flex:0 0 50px"><label class="label">Emoji</label>
+              <input type="text" id="auf-emoji" value="⭐" style="text-align:center"></div>
+            <div class="field" style="flex:1"><label class="label">Aufgabe</label>
+              <input type="text" id="auf-titel" placeholder="z.B. Zimmer aufräumen"></div>
+          </div>
+          <div class="field"><label class="label">Punkte</label>
+            <input type="number" id="auf-punkte" value="1" min="1" max="10"></div>
+          <button class="btn btn-primary btn-full" onclick="speichereAufgabe()">+ Aufgabe hinzufügen</button>
+        </div>
+      </div>
+      <div id="auf-liste" class="stack">
+        <div class="empty"><p>Kind wählen</p></div>
+      </div>
+    </div>
+
+    <!-- MEDIEN -->
+    <div id="ep-medien" class="epanel" style="display:none">
+      <div class="row" style="justify-content:space-between;margin-bottom:14px">
+        <h3>Medien</h3>
+      </div>
+      <div class="field" style="margin-bottom:14px">
+        <label class="label">Kind</label>
+        <select id="med-kind" onchange="ladeMedien()"><option value="">– Kind wählen –</option></select>
+      </div>
+      <div class="upload-zone" style="margin-bottom:14px" onclick="$('file-input').click()">
+        <input type="file" id="file-input" style="display:none" accept="image/*,video/*" onchange="uploadMedium(event)">
+        <div style="font-size:2rem;margin-bottom:6px">📁</div>
+        <p style="font-size:.88rem;color:var(--muted)">Bild oder Video hochladen</p>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:3px">Klicken zum Auswählen</p>
+      </div>
+      <div id="upload-prog" style="display:none;margin-bottom:14px">
+        <div class="prog-bar"><div class="prog-fill" id="upload-bar" style="width:0%"></div></div>
+        <p class="muted" id="upload-label" style="margin-top:5px;font-size:.78rem">Hochladen...</p>
+      </div>
+      <div id="med-grid" class="media-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ VIEW: KINDERBEREICH ══════════════════════ -->
+<div id="v-kind" class="view">
+  <div class="content">
+    <div class="k-header">
+      <div id="k-avatar" class="k-avatar-big">🌟</div>
+      <h2 id="k-name">Hallo!</h2>
+      <p id="k-datum"></p>
+    </div>
+
+    <div class="k-progress">
+      <div class="row">
+        <span>Tagesfortschritt</span>
+        <span id="k-progress-text">0/0</span>
+      </div>
+      <div class="prog-bar-track">
+        <div class="prog-fill" id="k-progress-bar" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="k-nav">
+      <button class="k-nav-btn k-tp ktab active" id="btn-k-tagesplan" onclick="kindTab(this,'kp-tagesplan')">
+        <span class="ni">📅</span>Plan
+      </button>
+      <button class="k-nav-btn k-med ktab" onclick="kindTab(this,'kp-medien')">
+        <span class="ni">🖼️</span>Bilder
+      </button>
+      <button class="k-nav-btn k-auf ktab" onclick="kindTab(this,'kp-aufgaben')">
+        <span class="ni">⭐</span>Aufgaben
+      </button>
+    </div>
+
+    <!-- Tagesplan Kind -->
+    <div id="kp-tagesplan" class="kpanel">
+      <div id="k-tp-liste" class="stack">
+        <div class="k-empty"><div class="spin" style="margin:0 auto 10px"></div></div>
+      </div>
+    </div>
+
+    <!-- Medien Kind -->
+    <div id="kp-medien" class="kpanel" style="display:none">
+      <div id="k-med-grid" class="k-med-grid"></div>
+    </div>
+
+    <!-- Aufgaben Kind -->
+    <div id="kp-aufgaben" class="kpanel" style="display:none">
+      <div id="k-auf-liste" class="stack"></div>
+    </div>
+
+    <!-- Verlassen-Button -->
+    <div style="margin-top:20px;text-align:center">
+      <button class="k-nav-btn k-leave" style="width:100%;flex-direction:row;gap:10px;justify-content:center" onclick="pinVerlassen()">
+        <span class="ni" style="font-size:1.2rem">🔒</span> Verlassen
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ MODALS ════════════════════════════════════ -->
+
+<!-- Kind -->
+<div id="modal-kind" class="modal-bg" onclick="closeModal('modal-kind')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="modal-kind-title">Kind anlegen</h3>
+      <button class="icon-btn" onclick="closeModal('modal-kind')">✕</button>
+    </div>
+    <div class="stack">
+      <div class="field"><label class="label">Name</label>
+        <input type="text" id="kind-name" placeholder="z.B. Lena"></div>
+      <div class="field">
+        <label class="label">Avatar</label>
+        <div class="emoji-row">
+          <span class="emoji-pick" onclick="waehleEmoji(this)">🧒</span>
+          <span class="emoji-pick" onclick="waehleEmoji(this)">👦</span>
+          <span class="emoji-pick" onclick="waehleEmoji(this)">👧</span>
+          <span class="emoji-pick" onclick="waehleEmoji(this)">🌟</span>
+          <span class="emoji-pick" onclick="waehleEmoji(this)">🦊</span>
+          <span class="emoji-pick" onclick="waehleEmoji(this)">🐼</span>
+          <span class="emoji-pick" onclick="waehleEmoji(this)">🦋</span>
+          <span class="emoji-pick" onclick="waehleEmoji(this)">🦄</span>
+          <span class="emoji-pick" onclick="waehleEmoji(this)">🐬</span>
+          <span class="emoji-pick" onclick="waehleEmoji(this)">🐸</span>
+        </div>
+        <input type="text" id="kind-emoji" value="🧒" style="margin-top:8px;font-size:1.2rem">
+      </div>
+      <div class="field">
+        <label class="label">Farbe</label>
+        <div class="color-row">
+          <div class="color-dot" style="background:#6366f1;border-color:#6366f1" onclick="waehleFarbe('#6366f1')"></div>
+          <div class="color-dot" style="background:#10b981;border-color:#10b981" onclick="waehleFarbe('#10b981')"></div>
+          <div class="color-dot" style="background:#f59e0b;border-color:#f59e0b" onclick="waehleFarbe('#f59e0b')"></div>
+          <div class="color-dot" style="background:#f43f5e;border-color:#f43f5e" onclick="waehleFarbe('#f43f5e')"></div>
+          <div class="color-dot" style="background:#06b6d4;border-color:#06b6d4" onclick="waehleFarbe('#06b6d4')"></div>
+          <div class="color-dot" style="background:#8b5cf6;border-color:#8b5cf6" onclick="waehleFarbe('#8b5cf6')"></div>
+        </div>
+        <input type="hidden" id="kind-farbe" value="#6366f1">
+      </div>
+      <div class="field"><label class="label">PIN zum Verlassen (4 Ziffern)</label>
+        <input type="tel" id="kind-pin" placeholder="1234" maxlength="4"></div>
+      <input type="hidden" id="kind-id">
+      <button class="btn btn-primary btn-full" id="kind-save-btn" onclick="speichereKind()">Speichern</button>
+      <button class="btn btn-ghost btn-full"   onclick="closeModal('modal-kind')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tagesplan-Eintrag -->
+<div id="modal-eintrag" class="modal-bg" onclick="closeModal('modal-eintrag')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3>Tagesplan-Eintrag</h3>
+      <button class="icon-btn" onclick="closeModal('modal-eintrag')">✕</button>
+    </div>
+    <div class="stack">
+      <div class="row" style="gap:8px">
+        <div class="field" style="flex:0 0 60px"><label class="label">Emoji</label>
+          <input type="text" id="eintrag-emoji" value="📌" style="text-align:center;font-size:1.3rem"></div>
+        <div class="field" style="flex:1"><label class="label">Titel</label>
+          <input type="text" id="eintrag-titel" placeholder="z.B. Frühstück"></div>
+      </div>
+      <div class="row">
+        <div class="field" style="flex:1"><label class="label">Von</label>
+          <input type="time" id="eintrag-von" value="08:00"></div>
+        <div class="field" style="flex:1"><label class="label">Bis</label>
+          <input type="time" id="eintrag-bis" value="09:00"></div>
+      </div>
+      <div class="field"><label class="label">Beschreibung (optional)</label>
+        <textarea id="eintrag-beschr" rows="2" placeholder="Details..."></textarea></div>
+      <input type="hidden" id="eintrag-id">
+      <button class="btn btn-primary btn-full" id="eintrag-save-btn" onclick="speichereEintrag()">Speichern</button>
+      <button class="btn btn-ghost btn-full"   onclick="closeModal('modal-eintrag')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- PIN -->
+<div id="modal-pin" class="modal-bg">
+  <div class="modal" style="text-align:center" onclick="event.stopPropagation()">
+    <div style="font-size:3rem;margin-bottom:10px">🔒</div>
+    <h3 style="margin-bottom:4px">PIN eingeben</h3>
+    <p class="muted" style="margin-bottom:18px">Eltern-PIN zum Verlassen</p>
+    <input type="tel" id="pin-input" maxlength="4" pattern="[0-9]{4}"
+      style="text-align:center;font-size:2.2rem;letter-spacing:.6em;margin-bottom:16px" placeholder="••••">
+    <div class="stack">
+      <button class="btn btn-primary btn-full" onclick="pinPruefen()">✓ Bestätigen</button>
+      <button class="btn btn-ghost btn-full"   onclick="closeModal('modal-pin')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Medien Vollbild -->
+<div id="modal-media" class="modal-bg" onclick="closeModal('modal-media')" style="align-items:center;background:rgba(0,0,0,.92)">
+  <div onclick="event.stopPropagation()" style="max-width:92vw">
+    <img id="media-img" src="" alt="" style="max-width:92vw;max-height:82vh;border-radius:12px;object-fit:contain;display:block">
+    <div style="text-align:center;margin-top:12px">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-media')">✕ Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+</body>
+</html>
